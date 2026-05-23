@@ -1,4 +1,5 @@
 import api from '../api';
+import { IS_MOCK, MOCK_DELIVERIES } from '@/lib/mockData';
 
 export interface OrderItem {
   id: string;
@@ -8,6 +9,10 @@ export interface OrderItem {
   price: number;
   product: {
     name: string;
+    images?: {
+      url: string;
+      isPrimary?: boolean;
+    }[];
   };
   productVariant?: {
     id: string;
@@ -52,9 +57,15 @@ export interface OrderTrackingEvent {
   id: string;
   title: string;
   description?: string | null;
-  status?: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED' | null;
+  status?: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'DELIVERY_FAILED' | 'CANCELLED' | null;
   isCustomerVisible: boolean;
   createdAt: string;
+}
+
+export interface DeliveryProofLocation {
+  latitude: number;
+  longitude: number;
+  accuracy?: number | null;
 }
 
 export interface VerifyOrderPaymentResponse {
@@ -75,16 +86,35 @@ export interface Order {
   id: string;
   orderNumber?: string;
   customerId: string;
+  subtotalAmount?: number;
+  deliveryFee?: number;
   totalAmount: number;
-  status: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
-  paymentStatus: 'PENDING' | 'PAID' | 'FAILED';
+  amountCollected?: number;
+  amountRemaining?: number;
+  status: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'DELIVERY_FAILED' | 'CANCELLED';
+  paymentStatus: 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'FAILED';
   paymentMethod?: 'PLOPPLOP' | 'MONCASH' | 'CASH' | 'NATCASH' | 'KASHPAW';
   deliveryAddress?: DeliveryAddress;
+  deliveryMode?: 'INTERNAL' | 'EXTERNAL';
+  deliveryAgentId?: string | null;
   carrierName?: string | null;
+  deliveryAgentName?: string | null;
+  deliveryAgentPhone?: string | null;
+  deliveryZone?: string | null;
   trackingNumber?: string | null;
   estimatedDeliveryDate?: string | null;
   shippedAt?: string | null;
   deliveredAt?: string | null;
+  deliveryRecipientName?: string | null;
+  deliveryProofNote?: string | null;
+  deliveryProofPhotoUrl?: string | null;
+  deliveryProofPhotoPublicId?: string | null;
+  deliverySignatureUrl?: string | null;
+  deliverySignaturePublicId?: string | null;
+  deliveredLatitude?: number | null;
+  deliveredLongitude?: number | null;
+  deliveredLocationAccuracy?: number | null;
+  deliveryProofCapturedAt?: string | null;
   trackingEvents?: OrderTrackingEvent[];
   createdAt: string;
   customer?: {
@@ -100,17 +130,60 @@ export interface Order {
   };
   items?: OrderItem[];
   orderItems?: OrderItem[];
+  deliveryAgent?: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    phone?: string;
+  };
 }
 
 export interface UpdateOrderTrackingPayload {
+  deliveryMode?: 'INTERNAL' | 'EXTERNAL';
+  deliveryAgentId?: string | null;
   carrierName?: string;
+  deliveryAgentName?: string;
+  deliveryAgentPhone?: string;
+  deliveryZone?: string;
   trackingNumber?: string;
   estimatedDeliveryDate?: string;
   eventTitle?: string;
   eventDescription?: string;
-  eventStatus?: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'CANCELLED';
+  eventStatus?: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'DELIVERY_FAILED' | 'CANCELLED';
   isCustomerVisible?: boolean;
 }
+
+export interface DeliveryAssignment extends Order {}
+
+export const getMyDeliveryAssignments = async (): Promise<DeliveryAssignment[]> => {
+  if (IS_MOCK) return MOCK_DELIVERIES as unknown as DeliveryAssignment[];
+  const { data } = await api.get('/orders/delivery/my-assignments');
+  return (data.data || []).map(normalizeOrder);
+};
+
+export const updateMyDeliveryStatus = async (
+  orderId: string,
+  payload: {
+    status: 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'DELIVERY_FAILED';
+    note?: string;
+    recipientName?: string;
+    proofPhotoUrl?: string;
+    proofPhotoPublicId?: string;
+    signatureUrl?: string;
+    signaturePublicId?: string;
+    latitude?: number;
+    longitude?: number;
+    locationAccuracy?: number;
+  }
+): Promise<Order> => {
+  if (IS_MOCK) {
+    // En mode mock : retourne la commande avec le statut mis à jour
+    const found = MOCK_DELIVERIES.find((o) => o.id === orderId);
+    return { ...(found || {}), ...payload } as unknown as Order;
+  }
+  const { data } = await api.patch(`/orders/${orderId}/delivery-status`, payload);
+  return normalizeOrder(data.data);
+};
 
 export interface OrdersListResponse {
   orders: Order[];
@@ -130,9 +203,22 @@ function normalizeOrder(order: any): Order {
 
   return {
     ...order,
+    subtotalAmount: order?.subtotalAmount != null ? Number(order.subtotalAmount) : undefined,
+    deliveryFee: order?.deliveryFee != null ? Number(order.deliveryFee) : undefined,
+    amountCollected: order?.amountCollected != null ? Number(order.amountCollected) : 0,
+    amountRemaining:
+      order?.totalAmount != null
+        ? Math.max(0, Number(order.totalAmount) - Number(order?.amountCollected ?? 0))
+        : undefined,
     orderItems: normalizedItems,
     items: normalizedItems,
     trackingEvents: order?.trackingEvents ?? [],
+    deliveredLatitude:
+      order?.deliveredLatitude != null ? Number(order.deliveredLatitude) : null,
+    deliveredLongitude:
+      order?.deliveredLongitude != null ? Number(order.deliveredLongitude) : null,
+    deliveredLocationAccuracy:
+      order?.deliveredLocationAccuracy != null ? Number(order.deliveredLocationAccuracy) : null,
   };
 }
 
@@ -154,14 +240,28 @@ export const verifyOrderPayment = async (orderId: string): Promise<VerifyOrderPa
   };
 };
 
+export const markOrderPaymentFailed = async (
+  orderId: string,
+  reason: 'cancelled' | 'failed' = 'failed'
+): Promise<Order> => {
+  const { data } = await api.post(`/orders/${orderId}/mark-payment-failed`, { reason });
+  return normalizeOrder(data.data);
+};
+
+export const cancelMyOrder = async (orderId: string): Promise<Order> => {
+  const { data } = await api.post(`/orders/${orderId}/cancel`);
+  return normalizeOrder(data.data);
+};
+
 // Get all orders for admin
 export const getAllOrders = async (
   page = 1,
   limit = 20,
   status?: string,
-  paymentStatus?: string
+  paymentStatus?: string,
+  deliveryAgentId?: string
 ): Promise<OrdersListResponse> => {
-  const { data } = await api.get('/orders/all', { params: { page, limit, status, paymentStatus } });
+  const { data } = await api.get('/orders/all', { params: { page, limit, status, paymentStatus, deliveryAgentId } });
   return {
     ...data.data,
     orders: (data.data.orders || []).map(normalizeOrder),
@@ -199,4 +299,12 @@ export const getMyOrders = async (page = 1, limit = 10): Promise<OrdersListRespo
 export const getOrderDetail = async (orderId: string): Promise<Order> => {
   const { data } = await api.get(`/orders/${orderId}`);
   return normalizeOrder(data.data);
+};
+
+export const downloadOrderInvoice = async (orderId: string): Promise<Blob> => {
+  const { data } = await api.get(`/orders/${orderId}/invoice`, {
+    responseType: 'blob',
+  });
+
+  return data;
 };
