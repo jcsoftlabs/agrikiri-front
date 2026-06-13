@@ -3,6 +3,7 @@ export interface PendingPaymentSession {
   orderNumber?: string;
   paymentMethod: 'PLOPPLOP' | 'MONCASH' | 'NATCASH' | 'KASHPAW';
   referenceId: string;
+  paymentUrl?: string;
   createdAt: string;
 }
 

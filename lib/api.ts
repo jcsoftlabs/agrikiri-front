@@ -1,12 +1,13 @@
 import axios from 'axios';
-
-// Get API URL from env or fallback to production URL if in prod, else localhost
-const IS_PROD = process.env.NODE_ENV === 'production';
-const DEFAULT_URL = IS_PROD 
-  ? 'https://agrikiri-backend-production.up.railway.app/api' 
-  : 'http://localhost:3001/api';
-
-const API_URL = process.env.NEXT_PUBLIC_API_URL || DEFAULT_URL;
+import {
+  API_URL,
+  clearStoredSession,
+  getStoredToken,
+  getStoredRole,
+  isCustomerRole,
+  refreshCustomerAccessToken,
+  redirectToLogin,
+} from '@/lib/authSession';
 
 const api = axios.create({
   baseURL: API_URL,
@@ -26,9 +27,8 @@ api.interceptors.request.use(
       }
     }
 
-    // Check if we are in browser environment
     if (typeof window !== 'undefined') {
-      const token = localStorage.getItem('agrikiri_token');
+      const token = getStoredToken();
       if (token && config.headers) {
         config.headers.Authorization = `Bearer ${token}`;
       }
@@ -45,13 +45,29 @@ api.interceptors.response.use(
   (response) => {
     return response;
   },
-  (error) => {
-    if (error.response?.status === 401 && typeof window !== 'undefined') {
-      // Clear local storage and redirect to login if authentication fails
-      // Note: We avoid circular dependencies by doing this directly or via event emission
-      // localStorage.removeItem('agrikiri_token');
-      // window.location.href = '/login'; // Optional: Redirect forcibly
+  async (error) => {
+    const originalRequest = error.config as (typeof error.config & { _retry?: boolean }) | undefined;
+
+    if (
+      error.response?.status === 401 &&
+      typeof window !== 'undefined' &&
+      originalRequest &&
+      !originalRequest._retry &&
+      isCustomerRole(getStoredRole())
+    ) {
+      originalRequest._retry = true;
+      const refreshedToken = await refreshCustomerAccessToken();
+
+      if (refreshedToken) {
+        originalRequest.headers = originalRequest.headers ?? {};
+        originalRequest.headers.Authorization = `Bearer ${refreshedToken}`;
+        return api(originalRequest);
+      }
+
+      clearStoredSession();
+      redirectToLogin();
     }
+
     return Promise.reject(error);
   }
 );

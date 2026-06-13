@@ -1,6 +1,21 @@
 import { create } from 'zustand';
 import { createJSONStorage, persist } from 'zustand/middleware';
 
+import type { ProductVariantPricingTier } from '@/lib/services/products';
+
+function getTieredUnitPrice(
+  basePrice: number,
+  quantity: number,
+  pricingTiers: ProductVariantPricingTier[] = []
+) {
+  const matchedTier = pricingTiers
+    .slice()
+    .sort((a, b) => a.minQuantity - b.minQuantity)
+    .find((tier) => quantity >= tier.minQuantity && (tier.maxQuantity == null || quantity <= tier.maxQuantity));
+
+  return matchedTier ? Number(matchedTier.price) : basePrice;
+}
+
 export interface CartItem {
   key: string;
   productId: string;
@@ -10,10 +25,12 @@ export interface CartItem {
   variantId?: string;
   variantLabel?: string;
   unitPrice: number;
+  baseUnitPrice: number;
   vpPoints: number;
   weightLbs: number;
   quantity: number;
   maxStock: number;
+  pricingTiers?: ProductVariantPricingTier[];
 }
 
 interface AddCartItemInput extends Omit<CartItem, 'key'> {}
@@ -30,6 +47,9 @@ interface CartState {
 
 const getCartItemKey = (productId: string, variantId?: string) =>
   variantId ? `${productId}:${variantId}` : productId;
+
+const resolveBaseUnitPrice = (baseUnitPrice: number | undefined, unitPrice: number) =>
+  typeof baseUnitPrice === 'number' && Number.isFinite(baseUnitPrice) ? baseUnitPrice : unitPrice;
 
 const clampQuantity = (quantity: number, maxStock: number) =>
   Math.max(1, Math.min(quantity, Math.max(1, maxStock)));
@@ -59,11 +79,17 @@ export const useCartStore = create<CartState>()(
                       ...cartItem,
                       imageUrl: item.imageUrl,
                       variantLabel: item.variantLabel,
-                      unitPrice: item.unitPrice,
+                      baseUnitPrice: resolveBaseUnitPrice(item.baseUnitPrice, item.unitPrice),
                       vpPoints: item.vpPoints,
                       weightLbs: item.weightLbs,
                       maxStock,
+                      pricingTiers: item.pricingTiers,
                       quantity: clampQuantity(cartItem.quantity + item.quantity, maxStock),
+                      unitPrice: getTieredUnitPrice(
+                        resolveBaseUnitPrice(item.baseUnitPrice, item.unitPrice),
+                        clampQuantity(cartItem.quantity + item.quantity, maxStock),
+                        item.pricingTiers
+                      ),
                     }
                   : cartItem
               ),
@@ -78,6 +104,12 @@ export const useCartStore = create<CartState>()(
                 key,
                 quantity: clampQuantity(item.quantity, maxStock),
                 maxStock,
+                baseUnitPrice: resolveBaseUnitPrice(item.baseUnitPrice, item.unitPrice),
+                unitPrice: getTieredUnitPrice(
+                  resolveBaseUnitPrice(item.baseUnitPrice, item.unitPrice),
+                  clampQuantity(item.quantity, maxStock),
+                  item.pricingTiers
+                ),
               },
             ],
           };
@@ -90,6 +122,12 @@ export const useCartStore = create<CartState>()(
                 ? {
                     ...item,
                     quantity: clampQuantity(quantity, item.maxStock),
+                    unitPrice: getTieredUnitPrice(
+                      resolveBaseUnitPrice(item.baseUnitPrice, item.unitPrice),
+                      clampQuantity(quantity, item.maxStock),
+                      item.pricingTiers
+                    ),
+                    baseUnitPrice: resolveBaseUnitPrice(item.baseUnitPrice, item.unitPrice),
                   }
                 : item
             )

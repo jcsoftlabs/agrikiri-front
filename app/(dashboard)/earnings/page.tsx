@@ -5,6 +5,7 @@ import { useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import LevelBadge from '@/components/mlm/LevelBadge';
 import QuotaProgress from '@/components/mlm/QuotaProgress';
+import DashboardShell from '@/components/dashboard/DashboardShell';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import { getMyMLMStats, getMyCommissions } from '@/lib/services/mlm';
@@ -33,7 +34,7 @@ const STATUS_LABELS: Record<string, string> = {
 
 export default function EarningsPage() {
   const router = useRouter();
-  const { user, logout } = useAuthStore();
+  const { user } = useAuthStore();
   const isAyizan = user?.role === 'AYIZAN';
 
   useEffect(() => {
@@ -57,49 +58,47 @@ export default function EarningsPage() {
   }
 
   return (
-    <div className="min-h-screen bg-agri-cream">
-      {/* Header */}
-      <div className="bg-gradient-to-br from-agri-green-800 to-agri-green-600 pt-6 pb-12">
-        <div className="max-w-7xl mx-auto px-6">
-          <div className="flex items-center justify-between gap-4 mb-6">
-            <Link href="/dashboard" className="text-white/70 hover:text-white text-sm">← Tableau de bord</Link>
-            <button onClick={logout} className="text-white/70 hover:text-red-400 text-sm flex items-center gap-2 transition-colors">
-              <span>↩</span> Déconnexion
-            </button>
+    <DashboardShell
+      currentPath="/earnings"
+      title="Mes Gains"
+      subtitle="Consultez vos commissions, votre quota et l’historique complet de vos revenus MLM."
+      headerAction={
+        <Link href="/dashboard" className="inline-flex items-center rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 transition-colors hover:border-agri-green-300 hover:text-agri-green-700">
+          ← Tableau de bord
+        </Link>
+      }
+    >
+      <div className="mb-8 overflow-hidden rounded-[30px] border border-white/20 bg-gradient-to-br from-agri-green-800 to-agri-green-600 shadow-[0_22px_70px_rgba(24,50,34,0.16)]">
+        <div className="p-6">
+          <div className="text-xs uppercase tracking-[0.3em] text-white/60">Performance MLM</div>
+          <div className="mt-3 text-5xl font-bold text-white font-display md:text-6xl">
+            {totalEarnings.toLocaleString()}
+            <span className="ml-2 text-2xl font-normal text-white/70">HTG</span>
           </div>
-          <h1 className="font-display text-4xl text-white mb-2">Mes Gains</h1>
-          <p className="text-white/70">Histoique complet de vos commissions</p>
+          <p className="mt-2 text-white/70">Commissions totales cumulées</p>
+        </div>
 
-          {/* Gros total */}
-          <div className="mt-8 text-center">
-            <div className="text-6xl font-bold text-white font-display">
-              {totalEarnings.toLocaleString()}
-              <span className="text-2xl font-normal text-white/70 ml-2">HTG</span>
+        <div className="grid gap-px bg-white/10 sm:grid-cols-3">
+          {[
+            { label: 'Ce mois', value: `${Number(thisMonthEarnings).toLocaleString()} HTG` },
+            { label: 'En attente', value: `${Number(pendingEarnings).toLocaleString()} HTG` },
+            { label: 'Déjà payé', value: `${Number(totalEarnings).toLocaleString()} HTG` },
+          ].map((item) => (
+            <div key={item.label} className="bg-white/10 px-5 py-4 backdrop-blur-sm">
+              <div className="text-xl font-bold text-white">{item.value}</div>
+              <div className="mt-1 text-sm text-white/70">{item.label}</div>
             </div>
-            <p className="text-white/60 mt-2">Commissions totales cumulées</p>
-          </div>
-
-          {/* Summary cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mt-8">
-            {[
-              { label: 'Ce mois', value: `${Number(thisMonthEarnings).toLocaleString()} HTG`, color: 'text-agri-gold-400' },
-              { label: 'En attente', value: `${Number(pendingEarnings).toLocaleString()} HTG`, color: 'text-yellow-300' },
-              { label: 'Déjà payé', value: `${Number(totalEarnings).toLocaleString()} HTG`, color: 'text-green-300' },
-            ].map((item) => (
-              <div key={item.label} className="bg-white/10 rounded-2xl p-4 text-center backdrop-blur-sm">
-                <div className={`text-xl font-bold ${item.color}`}>{item.value}</div>
-                <div className="text-sm text-white/70 mt-1">{item.label}</div>
-              </div>
-            ))}
-          </div>
+          ))}
         </div>
       </div>
 
-      <div className="max-w-7xl mx-auto px-6 -mt-4 pb-12">
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-          {/* Bar chart */}
-          <div className="lg:col-span-2 card p-6">
-            <h2 className="font-semibold text-agri-dark mb-4">Historique mensuel</h2>
+          <div className="lg:col-span-2 card overflow-hidden p-0">
+            <div className="border-b border-gray-100 px-6 py-4">
+              <h2 className="font-display text-2xl text-agri-dark">Historique mensuel</h2>
+              <p className="mt-1 text-sm text-gray-500">Suivez l’évolution de vos commissions mois après mois.</p>
+            </div>
+            <div className="p-4 sm:p-6">
             <ResponsiveContainer width="100%" height={240}>
               <BarChart data={[]}>
                 <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
@@ -112,19 +111,19 @@ export default function EarningsPage() {
                 <Bar dataKey="total" fill="#2D7A2D" radius={[6, 6, 0, 0]} />
               </BarChart>
             </ResponsiveContainer>
+            </div>
           </div>
 
-          {/* Quota & Level */}
           <div className="card p-6 space-y-6">
-            <div>
+            <div className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm">
               <h2 className="font-semibold text-agri-dark mb-3">Quota Mensuel</h2>
               <QuotaProgress currentVP={stats.personalVP || 0} />
             </div>
-            <div className="border-t border-gray-100 pt-4">
+            <div className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm">
               <div className="text-sm text-gray-500 mb-2">Votre niveau actuel</div>
               <LevelBadge level={user?.mlmLevel || 'CUSTOMER'} size="lg" showDescription />
             </div>
-            <div className="bg-agri-green-50 rounded-2xl p-4">
+            <div className="rounded-[24px] bg-agri-green-50 p-4">
               <div className="text-sm text-agri-green-700 font-medium mb-1">Commission mensuelle potentielle</div>
               <div className="text-2xl font-bold text-agri-green-800">100,000 HTG</div>
               <div className="text-xs text-agri-green-600 mt-1">Si quota 546 VP atteint</div>
@@ -132,10 +131,12 @@ export default function EarningsPage() {
           </div>
         </div>
 
-        {/* Commission details table */}
         <div className="card p-6">
           <div className="flex justify-between items-center mb-6">
-            <h2 className="font-semibold text-agri-dark">Détail des Commissions</h2>
+            <div>
+              <h2 className="font-display text-2xl text-agri-dark">Détail des Commissions</h2>
+              <p className="mt-1 text-sm text-gray-500">Retrouvez chaque gain, sa provenance et son état de paiement.</p>
+            </div>
             <button className="text-sm text-agri-green-600 font-medium border border-agri-green-200 px-4 py-2 rounded-xl hover:bg-agri-green-50 transition-colors">
               📥 Exporter CSV
             </button>
@@ -148,7 +149,7 @@ export default function EarningsPage() {
               ))
             ) : commissions.length > 0 ? (
               commissions.map((commission, i) => (
-                <div key={i} className="rounded-2xl border border-gray-100 bg-white p-4 shadow-sm space-y-3">
+                <div key={i} className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm space-y-3">
                   <div className="flex items-start justify-between gap-3">
                     <div className="text-sm text-gray-400">
                       {new Date(commission.createdAt).toLocaleDateString()}
@@ -160,7 +161,9 @@ export default function EarningsPage() {
 
                   <div>
                     <div className="text-xs font-semibold uppercase tracking-wide text-gray-400 mb-1">Source</div>
-                    <div className="text-sm font-medium text-agri-dark break-all">{commission.sourceUserId || 'Système'}</div>
+                    <div className="rounded-2xl bg-gray-50 px-3 py-2 text-sm font-medium text-agri-dark break-all">
+                      {commission.sourceUserId || 'Système'}
+                    </div>
                   </div>
 
                   <div className="flex items-end justify-between gap-3">
@@ -229,7 +232,6 @@ export default function EarningsPage() {
             </table>
           </div>
         </div>
-      </div>
-    </div>
+    </DashboardShell>
   );
 }

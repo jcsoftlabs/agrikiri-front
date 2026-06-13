@@ -51,18 +51,19 @@ export default function AdminMlmPage() {
       <AdminSidebar />
 
       <main className="flex-1 lg:ml-64 p-6 lg:p-8">
-        <div className="flex justify-between items-center mb-8">
+        <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-8">
           <div>
             <h1 className="font-display text-3xl text-agri-dark">Réseau MLM</h1>
             <p className="text-gray-500 mt-1">Gestion des niveaux, quotas et commissions</p>
           </div>
-          <div className="flex gap-3">
-            <Button variant="secondary" onClick={handleExportCSV}>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button variant="secondary" className="w-full sm:w-auto" onClick={handleExportCSV}>
               📥 Exporter rapport CSV
             </Button>
             <Button 
               id="validate-quota-btn" 
               variant="primary" 
+              className="w-full sm:w-auto"
               onClick={handleValidateQuota}
               loading={validateMutation.isPending}
             >
@@ -101,8 +102,9 @@ export default function AdminMlmPage() {
                 const percentage = stats.totalAyizan > 0 ? (level.count / stats.totalAyizan) * 100 : 0;
 
                 return (
-                  <div key={level.level} className="flex items-center gap-4 group">
-                    <div className="w-36 flex-shrink-0">
+                  <div key={level.level} className="rounded-2xl border border-gray-100 bg-white p-4 group">
+                    <div className="flex flex-col gap-4 sm:flex-row sm:items-center">
+                    <div className="sm:w-36 flex-shrink-0">
                       <LevelBadge level={level.level} size="sm" />
                     </div>
                     <div className="flex-1">
@@ -120,7 +122,8 @@ export default function AdminMlmPage() {
                         />
                       </div>
                     </div>
-                    <div className="w-12 text-right font-bold text-agri-dark text-sm">{level.count}</div>
+                    <div className="sm:w-12 text-left sm:text-right font-bold text-agri-dark text-sm">{level.count}</div>
+                    </div>
                   </div>
                 );
               })

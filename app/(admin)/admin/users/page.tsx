@@ -9,6 +9,7 @@ import LevelBadge from '@/components/mlm/LevelBadge';
 import {
   createAdminUser,
   deleteAdminUser,
+  getDeliveryAgentHistory,
   getUsersList,
   updateAdminUser,
   type AdminUserPayload,
@@ -46,6 +47,11 @@ const EMPTY_USER_FORM: UserFormData = {
 const ROLE_OPTIONS: Array<{ value: AdminUserPayload['role']; label: string }> = [
   { value: 'CUSTOMER', label: 'Client' },
   { value: 'AYIZAN', label: 'AYIZAN' },
+  { value: 'BUYER', label: 'Acheteur terrain' },
+  { value: 'DELIVERY_AGENT', label: 'Livreur' },
+  { value: 'STOCK_MANAGER', label: 'Gestionnaire de stock' },
+  { value: 'CASHIER', label: 'Caissier POS' },
+  { value: 'ACCOUNTANT', label: 'Comptabilité' },
   { value: 'ADMIN', label: 'Admin' },
 ];
 
@@ -53,6 +59,11 @@ function RoleBadge({ role }: { role: UserListItem['role'] }) {
   const roleStyles = {
     ADMIN: 'bg-purple-50 text-purple-700 border-purple-200',
     AYIZAN: 'bg-agri-green-50 text-agri-green-700 border-agri-green-200',
+    BUYER: 'bg-amber-50 text-amber-700 border-amber-200',
+    DELIVERY_AGENT: 'bg-blue-50 text-blue-700 border-blue-200',
+    STOCK_MANAGER: 'bg-lime-50 text-lime-700 border-lime-200',
+    CASHIER: 'bg-emerald-50 text-emerald-700 border-emerald-200',
+    ACCOUNTANT: 'bg-cyan-50 text-cyan-700 border-cyan-200',
     CUSTOMER: 'bg-gray-50 text-gray-600 border-gray-200',
   } as const;
 
@@ -78,16 +89,31 @@ function StatusBadge({ isActive }: { isActive: boolean }) {
   );
 }
 
+function MlmStatusCell({ role, mlmLevel }: { role: UserListItem['role']; mlmLevel: UserListItem['mlmLevel'] }) {
+  if (role !== 'AYIZAN') {
+    return <span className="text-xs font-medium text-gray-400">Non applicable</span>;
+  }
+
+  return <LevelBadge level={mlmLevel} size="sm" />;
+}
+
 export default function AdminUsersPage() {
   const queryClient = useQueryClient();
   const [page, setPage] = useState(1);
   const [search, setSearch] = useState('');
+  const [roleFilter, setRoleFilter] = useState<'' | AdminUserPayload['role']>('');
   const [userModal, setUserModal] = useState<UserModalState>({ open: false, mode: 'create' });
   const [userForm, setUserForm] = useState<UserFormData>(EMPTY_USER_FORM);
+  const [historyUserId, setHistoryUserId] = useState<string | null>(null);
 
   const { data: usersData, isLoading } = useQuery({
-    queryKey: ['admin-users', page, search],
-    queryFn: () => getUsersList(page, 20, search),
+    queryKey: ['admin-users', page, search, roleFilter],
+    queryFn: () => getUsersList(page, 20, search, roleFilter || undefined),
+  });
+  const { data: deliveryHistory, isLoading: isHistoryLoading } = useQuery({
+    queryKey: ['delivery-agent-history', historyUserId],
+    queryFn: () => getDeliveryAgentHistory(historyUserId!),
+    enabled: Boolean(historyUserId),
   });
 
   const createMutation = useMutation({
@@ -200,7 +226,7 @@ export default function AdminUsersPage() {
         <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between mb-8">
           <div>
             <h1 className="font-display text-3xl text-agri-dark">Gestion des Utilisateurs</h1>
-            <p className="text-gray-500 mt-1">Création, mise à jour et suivi des comptes clients, AYIZAN et admins</p>
+            <p className="text-gray-500 mt-1">Création, mise à jour et suivi des comptes clients, acheteurs terrain, AYIZAN et admins</p>
           </div>
 
           <div className="flex flex-col sm:flex-row gap-3">
@@ -219,6 +245,19 @@ export default function AdminUsersPage() {
                 }}
               />
             </div>
+            <select
+              className="px-4 py-2.5 rounded-2xl border border-gray-100 bg-white/80 backdrop-blur-sm text-sm outline-none focus:ring-2 focus:ring-agri-green-500 shadow-sm transition-all"
+              value={roleFilter}
+              onChange={(e) => {
+                setRoleFilter(e.target.value as '' | AdminUserPayload['role']);
+                setPage(1);
+              }}
+            >
+              <option value="">Tous les rôles</option>
+              {ROLE_OPTIONS.map((option) => (
+                <option key={option.value} value={option.value}>{option.label}</option>
+              ))}
+            </select>
             <Button variant="primary" onClick={openCreateModal}>
               + Nouvel utilisateur
             </Button>
@@ -251,7 +290,7 @@ export default function AdminUsersPage() {
                   <div className="flex flex-wrap gap-2">
                     <RoleBadge role={user.role} />
                     <StatusBadge isActive={user.isActive} />
-                    <LevelBadge level={user.mlmLevel} size="sm" />
+                    <MlmStatusCell role={user.role} mlmLevel={user.mlmLevel} />
                   </div>
 
                   <div className="grid grid-cols-2 gap-3 text-sm">
@@ -281,6 +320,16 @@ export default function AdminUsersPage() {
                   </div>
 
                   <div className="flex flex-col sm:flex-row gap-2">
+                    {user.role === 'DELIVERY_AGENT' && (
+                      <Button
+                        variant="ghost"
+                        size="sm"
+                        className="sm:flex-1"
+                        onClick={() => setHistoryUserId(user.id)}
+                      >
+                        Historique
+                      </Button>
+                    )}
                     <Button
                       variant="secondary"
                       size="sm"
@@ -367,13 +416,20 @@ export default function AdminUsersPage() {
                         </div>
                       </td>
                       <td>
-                        <RoleBadge role={user.role} />
+                        <div className="flex items-center gap-2">
+                          <RoleBadge role={user.role} />
+                          {user.role === 'DELIVERY_AGENT' && (
+                            <Button variant="ghost" size="sm" onClick={() => setHistoryUserId(user.id)}>
+                              Historique
+                            </Button>
+                          )}
+                        </div>
                       </td>
                       <td>
                         <StatusBadge isActive={user.isActive} />
                       </td>
                       <td>
-                        <LevelBadge level={user.mlmLevel} size="sm" />
+                        <MlmStatusCell role={user.role} mlmLevel={user.mlmLevel} />
                       </td>
                       <td>
                         <span
@@ -611,6 +667,88 @@ export default function AdminUsersPage() {
                   </Button>
                 </div>
               </form>
+            </div>
+          </div>
+        )}
+
+        {historyUserId && (
+          <div className="fixed inset-0 z-50 bg-black/40 backdrop-blur-sm flex items-center justify-center p-4">
+            <div className="w-full max-w-4xl max-h-[90vh] overflow-y-auto bg-white rounded-3xl shadow-2xl border border-gray-100">
+              <div className="px-6 py-5 border-b border-gray-100 flex items-center justify-between">
+                <div>
+                  <h2 className="font-display text-2xl text-agri-dark">Historique du livreur</h2>
+                  {deliveryHistory && (
+                    <p className="text-sm text-gray-500 mt-1">
+                      {deliveryHistory.deliveryAgent.firstName} {deliveryHistory.deliveryAgent.lastName}
+                    </p>
+                  )}
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setHistoryUserId(null)}
+                  className="w-10 h-10 rounded-full bg-gray-50 hover:bg-gray-100 transition-colors"
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="p-6 space-y-6">
+                {isHistoryLoading || !deliveryHistory ? (
+                  <div className="space-y-4">
+                    <div className="shimmer h-24 w-full rounded-2xl" />
+                    <div className="shimmer h-64 w-full rounded-2xl" />
+                  </div>
+                ) : (
+                  <>
+                    <div className="grid grid-cols-2 lg:grid-cols-5 gap-3">
+                      {[
+                        { label: 'Total', value: deliveryHistory.stats.total },
+                        { label: 'Livrées', value: deliveryHistory.stats.delivered },
+                        { label: 'Échecs', value: deliveryHistory.stats.failed },
+                        { label: 'En route', value: deliveryHistory.stats.onRoad },
+                        { label: 'À récupérer', value: deliveryHistory.stats.pendingPickup },
+                      ].map((item) => (
+                        <div key={item.label} className="rounded-2xl border border-gray-100 bg-agri-cream/60 p-4">
+                          <div className="text-xs uppercase tracking-wide text-gray-400">{item.label}</div>
+                          <div className="mt-2 text-2xl font-bold text-agri-dark">{item.value}</div>
+                        </div>
+                      ))}
+                    </div>
+
+                    <div className="rounded-3xl border border-gray-100 overflow-hidden">
+                      <div className="px-5 py-4 border-b border-gray-100 bg-gray-50/70">
+                        <h3 className="font-semibold text-agri-dark">Dernières livraisons assignées</h3>
+                      </div>
+                      <div className="divide-y divide-gray-100">
+                        {deliveryHistory.orders.length > 0 ? (
+                          deliveryHistory.orders.map((order) => (
+                            <div key={order.id} className="px-5 py-4 flex flex-col lg:flex-row lg:items-center lg:justify-between gap-3">
+                              <div>
+                                <div className="font-semibold text-agri-dark">{order.orderNumber}</div>
+                                <div className="text-sm text-gray-500">
+                                  {order.customer.firstName} {order.customer.lastName}
+                                  {order.deliveryZone ? ` · ${order.deliveryZone}` : ''}
+                                </div>
+                              </div>
+                              <div className="flex flex-wrap items-center gap-3 text-sm">
+                                <span className="font-semibold text-agri-green-700">{order.totalAmount.toLocaleString()} HTG</span>
+                                <span className="rounded-full bg-gray-100 px-3 py-1 text-xs font-semibold text-gray-700">{order.status}</span>
+                                <span className="text-gray-400">
+                                  {new Date(order.createdAt).toLocaleDateString('fr-HT')}
+                                </span>
+                              </div>
+                            </div>
+                          ))
+                        ) : (
+                          <div className="px-5 py-10 text-center text-gray-400 italic">
+                            Aucune livraison assignée pour ce livreur pour le moment.
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         )}

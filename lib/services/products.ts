@@ -12,6 +12,14 @@ export interface ProductImage {
   order: number;
 }
 
+export interface ProductVariantPricingTier {
+  id?: string;
+  minQuantity: number;
+  maxQuantity?: number | null;
+  price: number | string;
+  sortOrder?: number;
+}
+
 export interface ProductVariant {
   id?: string;
   label: string;
@@ -22,6 +30,7 @@ export interface ProductVariant {
   isDefault?: boolean;
   isActive?: boolean;
   sortOrder?: number;
+  pricingTiers?: ProductVariantPricingTier[];
 }
 
 export interface Category {

@@ -19,7 +19,7 @@ export interface CustomerAddress {
 }
 
 export interface UpsertCustomerAddressPayload {
-  label: string;
+  label?: string;
   countryCode: 'HT' | 'US';
   fullName: string;
   phoneCountryCode: '+509' | '+1';

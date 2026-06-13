@@ -20,6 +20,7 @@ import {
   uploadCategoryImage,
   type Product,
   type ProductVariant,
+  type ProductVariantPricingTier,
   type Category,
   type CreateProductPayload,
   type UpdateProductPayload,
@@ -46,6 +47,14 @@ interface ProductVariantFormData {
   vpPoints: string;
   weightLbs: string;
   stockQuantity: string;
+  pricingTiers: ProductVariantPricingTierFormData[];
+}
+
+interface ProductVariantPricingTierFormData {
+  id?: string;
+  minQuantity: string;
+  maxQuantity: string;
+  price: string;
 }
 
 interface CategoryFormData {
@@ -77,6 +86,7 @@ const EMPTY_PRODUCT_FORM: ProductFormData = {
       vpPoints: '',
       weightLbs: '',
       stockQuantity: '0',
+      pricingTiers: [],
     },
   ],
 };
@@ -90,6 +100,15 @@ function createEmptyVariant(): ProductVariantFormData {
     vpPoints: '',
     weightLbs: '',
     stockQuantity: '0',
+    pricingTiers: [],
+  };
+}
+
+function createEmptyPricingTier(): ProductVariantPricingTierFormData {
+  return {
+    minQuantity: '',
+    maxQuantity: '',
+    price: '',
   };
 }
 
@@ -101,6 +120,12 @@ function mapVariantToForm(variant: ProductVariant): ProductVariantFormData {
     vpPoints: String(variant.vpPoints),
     weightLbs: String(variant.weightLbs),
     stockQuantity: String(variant.stockQuantity),
+    pricingTiers: (variant.pricingTiers || []).map((tier) => ({
+      id: tier.id,
+      minQuantity: String(tier.minQuantity),
+      maxQuantity: tier.maxQuantity != null ? String(tier.maxQuantity) : '',
+      price: String(tier.price),
+    })),
   };
 }
 
@@ -296,6 +321,15 @@ export default function AdminProductsPage() {
         vpPoints: Number(variant.vpPoints),
         weightLbs: Number(variant.weightLbs),
         stockQuantity: Number(variant.stockQuantity),
+        pricingTiers: (variant.pricingTiers || [])
+          .map((tier, index) => ({
+            id: tier.id,
+            minQuantity: Number(tier.minQuantity),
+            maxQuantity: tier.maxQuantity.trim() ? Number(tier.maxQuantity) : null,
+            price: Number(tier.price),
+            sortOrder: index,
+          }))
+          .filter((tier) => !Number.isNaN(tier.minQuantity) && !Number.isNaN(tier.price)),
       }))
       .filter((variant) => variant.label);
 
@@ -309,7 +343,13 @@ export default function AdminProductsPage() {
           Number.isNaN(variant.price) ||
           Number.isNaN(variant.vpPoints) ||
           Number.isNaN(variant.weightLbs) ||
-          Number.isNaN(variant.stockQuantity)
+          Number.isNaN(variant.stockQuantity) ||
+          variant.pricingTiers.some(
+            (tier) =>
+              Number.isNaN(tier.minQuantity) ||
+              Number.isNaN(Number(tier.price)) ||
+              (tier.maxQuantity !== null && Number.isNaN(Number(tier.maxQuantity)))
+          )
       )
     ) {
       throw new Error('Toutes les variantes doivent avoir des valeurs numeriques valides.');
@@ -546,6 +586,27 @@ export default function AdminProductsPage() {
     }));
   };
 
+  const updatePricingTierField = (
+    variantIndex: number,
+    tierIndex: number,
+    field: keyof ProductVariantPricingTierFormData,
+    value: string
+  ) => {
+    setProductForm((current) => ({
+      ...current,
+      variants: current.variants.map((variant, currentVariantIndex) =>
+        currentVariantIndex === variantIndex
+          ? {
+              ...variant,
+              pricingTiers: (variant.pricingTiers || []).map((tier, currentTierIndex) =>
+                currentTierIndex === tierIndex ? { ...tier, [field]: value } : tier
+              ),
+            }
+          : variant
+      ),
+    }));
+  };
+
   const addVariantRow = () => {
     setProductForm((current) => ({
       ...current,
@@ -560,6 +621,34 @@ export default function AdminProductsPage() {
         current.variants.length === 1
           ? [createEmptyVariant()]
           : current.variants.filter((_, variantIndex) => variantIndex !== index),
+    }));
+  };
+
+  const addPricingTierRow = (variantIndex: number) => {
+    setProductForm((current) => ({
+      ...current,
+      variants: current.variants.map((variant, currentVariantIndex) =>
+        currentVariantIndex === variantIndex
+          ? {
+              ...variant,
+              pricingTiers: [...(variant.pricingTiers || []), createEmptyPricingTier()],
+            }
+          : variant
+      ),
+    }));
+  };
+
+  const removePricingTierRow = (variantIndex: number, tierIndex: number) => {
+    setProductForm((current) => ({
+      ...current,
+      variants: current.variants.map((variant, currentVariantIndex) =>
+        currentVariantIndex === variantIndex
+          ? {
+              ...variant,
+              pricingTiers: (variant.pricingTiers || []).filter((_, currentTierIndex) => currentTierIndex !== tierIndex),
+            }
+          : variant
+      ),
     }));
   };
 
@@ -683,8 +772,88 @@ export default function AdminProductsPage() {
               </div>
             ) : (
               <div className="card overflow-hidden">
+                <div className="space-y-4 p-4 lg:hidden">
+                  {filteredProducts.map((p) => {
+                    const primaryVariant = getPrimaryVariant(p);
+                    const priceRange = getVariantPriceRange(p);
+                    const activeVariants = getActiveVariants(p);
+
+                    return (
+                      <div key={p.id} className="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
+                        <div className="flex items-start gap-4">
+                          <div className="w-16 h-16 rounded-2xl overflow-hidden bg-gray-100 border border-gray-100 shrink-0">
+                            {p.images && p.images.length > 0 ? (
+                              // eslint-disable-next-line @next/next/no-img-element
+                              <img
+                                src={p.images.find((i) => i.isPrimary)?.url || p.images[0].url}
+                                alt={p.name}
+                                className="w-full h-full object-cover"
+                              />
+                            ) : (
+                              <div className="w-full h-full flex items-center justify-center text-gray-300 text-xl">🖼️</div>
+                            )}
+                          </div>
+                          <div className="min-w-0 flex-1">
+                            <div className="font-semibold text-agri-dark">{p.name}</div>
+                            <div className="text-xs text-gray-400 font-mono mt-1">{p.id.slice(0, 8)}…</div>
+                            <div className="mt-2 flex flex-wrap gap-2">
+                              <StatusBadge isActive={p.isActive} />
+                              <span className="text-xs bg-agri-green-50 text-agri-green-700 px-2 py-1 rounded-full font-medium">
+                                {p.category?.name || 'Non classé'}
+                              </span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                          <div className="rounded-2xl bg-agri-cream border border-gray-100 p-3">
+                            <div className="text-gray-400">Prix</div>
+                            <div className="font-bold text-agri-green-700 mt-1">
+                              {priceRange && priceRange.min !== priceRange.max
+                                ? `De ${priceRange.min.toLocaleString('fr-HT')} à ${priceRange.max.toLocaleString('fr-HT')}`
+                                : `${Number(primaryVariant?.price ?? p.price).toLocaleString('fr-HT')} HTG`}
+                            </div>
+                          </div>
+                          <div className="rounded-2xl bg-agri-cream border border-gray-100 p-3">
+                            <div className="text-gray-400">PSK / Stock</div>
+                            <div className="font-bold text-agri-dark mt-1">
+                              {Number(primaryVariant?.vpPoints ?? p.vpPoints)} PSK · {p.stockQuantity}
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 flex items-center justify-between gap-3">
+                          <div className="text-sm text-gray-500">
+                            {activeVariants.length > 0 ? `${activeVariants.length} variante(s)` : 'Aucune variante'}
+                          </div>
+                          <div className="flex items-center gap-2">
+                            <button
+                              id={`edit-product-mobile-${p.id}`}
+                              onClick={() => openEditProduct(p)}
+                              className="text-xs font-semibold text-agri-green-600 hover:bg-agri-green-50 px-3 py-2 rounded-xl transition-colors"
+                            >
+                              ✏️ Modifier
+                            </button>
+                            <button
+                              id={`delete-product-mobile-${p.id}`}
+                              onClick={() => {
+                                if (confirm(`Supprimer "${p.name}" définitivement ?\nSes images Cloudinary seront aussi supprimées.`)) {
+                                  deleteProdMut.mutate(p.id);
+                                }
+                              }}
+                              disabled={deleteProdMut.isPending}
+                              className="text-xs font-semibold text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl transition-colors"
+                            >
+                              🗑️ Supprimer
+                            </button>
+                          </div>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
                 <div className="overflow-x-auto">
-                  <table className="table-agri">
+                  <table className="table-agri hidden lg:table">
                     <thead>
                       <tr>
                         <th>Produit</th>
@@ -823,8 +992,69 @@ export default function AdminProductsPage() {
               </div>
             ) : (
               <div className="card overflow-hidden">
+                <div className="space-y-4 p-4 lg:hidden">
+                  {categories.map((cat) => (
+                    <div key={cat.id} className="rounded-3xl border border-gray-100 bg-white p-4 shadow-sm">
+                      <div className="flex items-start gap-4">
+                        <div className="w-14 h-14 rounded-2xl overflow-hidden bg-gray-100 border border-gray-100 shrink-0">
+                          {cat.imageUrl ? (
+                            // eslint-disable-next-line @next/next/no-img-element
+                            <img
+                              src={cat.imageUrl}
+                              alt={cat.name}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : (
+                            <div className="w-full h-full flex items-center justify-center text-gray-300 text-xl">🏷️</div>
+                          )}
+                        </div>
+                        <div className="min-w-0 flex-1">
+                          <div className="font-semibold text-agri-dark">{cat.name}</div>
+                          <div className="mt-1 inline-flex rounded-lg bg-gray-100 px-2 py-1 text-xs text-gray-600">
+                            {cat.slug}
+                          </div>
+                          <div className="mt-2 text-sm text-gray-500">
+                            {cat.description || 'Aucune description'}
+                          </div>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 flex items-center justify-between gap-3">
+                        <div className="inline-flex items-center justify-center rounded-full bg-agri-green-50 px-3 py-2 text-sm font-bold text-agri-green-700">
+                          {cat._count?.products ?? 0} produit(s)
+                        </div>
+                        <div className="flex items-center gap-2">
+                          <button
+                            id={`edit-category-mobile-${cat.id}`}
+                            onClick={() => openEditCategory(cat)}
+                            className="text-xs font-semibold text-agri-green-600 hover:bg-agri-green-50 px-3 py-2 rounded-xl transition-colors"
+                          >
+                            ✏️ Modifier
+                          </button>
+                          <button
+                            id={`delete-category-mobile-${cat.id}`}
+                            onClick={() => {
+                              const count = cat._count?.products ?? 0;
+                              if (count > 0) {
+                                toast.error(`Impossible : ${count} produit(s) utilisent cette catégorie. Réaffectez-les d'abord.`);
+                                return;
+                              }
+                              if (confirm(`Supprimer la catégorie "${cat.name}" ?`)) {
+                                deleteCatMut.mutate(cat.id);
+                              }
+                            }}
+                            disabled={deleteCatMut.isPending}
+                            className="text-xs font-semibold text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl transition-colors disabled:opacity-50"
+                          >
+                            🗑️ Supprimer
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
                 <div className="overflow-x-auto">
-                  <table className="table-agri">
+                  <table className="table-agri hidden lg:table">
                     <thead>
                       <tr>
                         <th>Image</th>
@@ -1016,7 +1246,7 @@ export default function AdminProductsPage() {
                             className="input"
                             type="number"
                             min="0"
-                            step="1"
+                            step="0.01"
                             value={variant.price}
                             onChange={(e) => updateVariantField(index, 'price', e.target.value)}
                             placeholder="2500"
@@ -1068,6 +1298,91 @@ export default function AdminProductsPage() {
                             required
                           />
                         </div>
+                      </div>
+
+                      <div className="rounded-2xl border border-agri-gold-300/40 bg-agri-gold-300/10 p-4">
+                        <div className="flex items-start justify-between gap-3 mb-3">
+                          <div>
+                            <h4 className="text-sm font-semibold text-agri-dark">Prix variable par quantité</h4>
+                            <p className="text-xs text-gray-500 mt-1">
+                              Optionnel. Le prix de base ci-dessus s’applique tant qu’aucun palier ne correspond.
+                            </p>
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => addPricingTierRow(index)}
+                            className="text-xs font-semibold text-agri-green-700 hover:bg-white px-3 py-2 rounded-xl transition-colors"
+                          >
+                            + Ajouter un palier
+                          </button>
+                        </div>
+
+                        {variant.pricingTiers.length > 0 ? (
+                          <div className="space-y-3">
+                            <div className="hidden sm:grid sm:grid-cols-[0.9fr_0.9fr_1fr_auto] gap-3 px-2 text-[11px] font-semibold uppercase tracking-[0.16em] text-gray-400">
+                              <span>Quantité min</span>
+                              <span>Quantité max</span>
+                              <span>Prix unitaire</span>
+                              <span />
+                            </div>
+                            {variant.pricingTiers.map((tier, tierIndex) => (
+                              <div
+                                key={`${variant.id || index}-tier-${tierIndex}`}
+                                className="grid grid-cols-1 sm:grid-cols-[0.9fr_0.9fr_1fr_auto] gap-3 rounded-2xl border border-white/70 bg-white p-3"
+                              >
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 mb-1 sm:hidden">Quantité min</label>
+                                  <input
+                                    className="input"
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={tier.minQuantity}
+                                    onChange={(e) => updatePricingTierField(index, tierIndex, 'minQuantity', e.target.value)}
+                                    placeholder="5"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 mb-1 sm:hidden">Quantité max</label>
+                                  <input
+                                    className="input"
+                                    type="number"
+                                    min="1"
+                                    step="1"
+                                    value={tier.maxQuantity}
+                                    onChange={(e) => updatePricingTierField(index, tierIndex, 'maxQuantity', e.target.value)}
+                                    placeholder="9 ou vide"
+                                  />
+                                </div>
+                                <div>
+                                  <label className="block text-xs font-semibold text-gray-500 mb-1 sm:hidden">Prix unitaire</label>
+                                  <input
+                                    className="input"
+                                    type="number"
+                                    min="0"
+                                    step="0.01"
+                                    value={tier.price}
+                                    onChange={(e) => updatePricingTierField(index, tierIndex, 'price', e.target.value)}
+                                    placeholder="450"
+                                  />
+                                </div>
+                                <div className="flex sm:items-center">
+                                  <button
+                                    type="button"
+                                    onClick={() => removePricingTierRow(index, tierIndex)}
+                                    className="w-full sm:w-auto text-xs font-semibold text-red-500 hover:bg-red-50 px-3 py-2 rounded-xl transition-colors"
+                                  >
+                                    Retirer
+                                  </button>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl border border-dashed border-white/90 bg-white/70 px-4 py-4 text-sm text-gray-500">
+                            Aucun palier configuré. Le produit gardera un prix fixe pour cette variante.
+                          </div>
+                        )}
                       </div>
                     </div>
                   ))}

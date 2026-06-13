@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import Button from '@/components/ui/Button';
 import toast from 'react-hot-toast';
@@ -85,8 +86,9 @@ export default function RegisterPage() {
       <div className="flex-1 flex items-center justify-center p-6">
         <div className="w-full max-w-md">
           <Link href="/" className="flex items-center gap-2 mb-10">
-            <div className="w-10 h-10 bg-agri-green-600 rounded-xl flex items-center justify-center text-white font-display text-xl font-bold">A</div>
-            <span className="font-display text-2xl font-bold text-agri-green-800">AGRIKIRI</span>
+            <div className="relative h-12 w-40">
+              <Image src="/images/logo.png" alt="AGRIKIRI" fill className="object-contain object-left" priority />
+            </div>
           </Link>
 
           <h1 className="font-display text-4xl text-agri-dark mb-2">Créer un compte</h1>
@@ -269,9 +271,9 @@ export default function RegisterPage() {
           <div className="space-y-4">
             {[
               { icon: '🌾', title: 'Produits 100% haïtiens', desc: 'Riz local et produits locaux de qualité supérieure' },
-              { icon: '💰', title: 'Gagnez des commissions', desc: '10% sur vos ventes directes, 5% sur votre réseau' },
+              { icon: '💰', title: 'Gagnez des commissions', desc: '1 PSK = 15 HTG, plus 20% niveau 1 et 10% niveau 2' },
               { icon: '🚀', title: 'Progressez rapidement', desc: '8 niveaux inspirés des héros haïtiens' },
-              { icon: '🏆', title: 'Aucun frais d\'entrée', desc: 'Commencez par un achat de produits (9,500 HTG)' },
+              { icon: '🏆', title: 'Aucun frais d\'entrée', desc: 'Commencez par un achat de produits (9,000 HTG)' },
             ].map((item) => (
               <div key={item.title} className="flex gap-4 p-4 bg-white/10 rounded-2xl">
                 <span className="text-3xl flex-shrink-0">{item.icon}</span>

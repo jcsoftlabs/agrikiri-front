@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import Link from 'next/link';
+import Image from 'next/image';
 import { useRouter } from 'next/navigation';
 import Button from '@/components/ui/Button';
 import toast from 'react-hot-toast';
@@ -27,7 +28,23 @@ export default function LoginPage() {
     try {
       const user = await login({ email, password });
       toast.success('Connexion réussie ! Redirection...');
-      router.push(user.role === 'ADMIN' ? '/admin' : safeNextPath || '/shop');
+      const fallbackPath =
+        user.role === 'ADMIN'
+          ? '/admin'
+          : user.role === 'CASHIER'
+            ? '/admin/pos'
+          : user.role === 'STOCK_MANAGER'
+            ? '/stock'
+          : user.role === 'ACCOUNTANT'
+            ? '/admin/accounting'
+          : user.role === 'BUYER'
+            ? '/buyer'
+          : user.role === 'DELIVERY_AGENT'
+            ? '/delivery'
+            : user.role === 'ASSOCIATE'
+              ? '/board'
+              : '/shop';
+      router.push(safeNextPath || fallbackPath);
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Email ou mot de passe incorrect');
     } finally {
@@ -42,10 +59,9 @@ export default function LoginPage() {
         <div className="w-full max-w-md">
           {/* Logo */}
           <Link href="/" className="flex items-center gap-2 mb-10">
-            <div className="w-10 h-10 bg-agri-green-600 rounded-xl flex items-center justify-center text-white font-display text-xl font-bold">
-              A
+            <div className="relative h-12 w-40">
+              <Image src="/images/logo.png" alt="AGRIKIRI" fill className="object-contain object-left" priority />
             </div>
-            <span className="font-display text-2xl font-bold text-agri-green-800">AGRIKIRI</span>
           </Link>
 
           <h1 className="font-display text-4xl text-agri-dark mb-2">Connexion</h1>

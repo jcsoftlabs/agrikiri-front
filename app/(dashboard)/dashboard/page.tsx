@@ -4,7 +4,7 @@ import Link from 'next/link';
 import { useState } from 'react';
 import LevelBadge from '@/components/mlm/LevelBadge';
 import QuotaProgress from '@/components/mlm/QuotaProgress';
-import DashboardNav from '@/components/dashboard/DashboardNav';
+import DashboardShell from '@/components/dashboard/DashboardShell';
 import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import { getMyMLMStats, getMyNetworkList } from '@/lib/services/mlm';
@@ -17,6 +17,7 @@ export default function DashboardPage() {
   const { user, checkAuth } = useAuthStore();
   const [isActivatingAyizan, setIsActivatingAyizan] = useState(false);
   const isAyizan = user?.role === 'AYIZAN';
+  const displayLevel = isAyizan ? (user?.mlmLevel || 'AYIZAN') : 'CUSTOMER';
 
   const { data: statsData, isLoading: statsLoading } = useQuery({
     queryKey: ['mlm-stats'],
@@ -52,21 +53,11 @@ export default function DashboardPage() {
   };
 
   return (
-    <div className="min-h-screen bg-agri-cream flex">
-      <DashboardNav currentPath="/dashboard" />
-
-      {/* Main content */}
-      <main className="flex-1 lg:ml-64 p-6 lg:p-8">
-        {/* Header */}
-        <div className="mb-8">
-          <h1 className="font-display text-3xl text-agri-dark">
-            {isAyizan ? 'Mon Tableau de Bord' : 'Mon Espace Client'}
-          </h1>
-          <p className="text-gray-500 mt-1">
-            Bienvenue de retour, {user?.firstName || ''} 👋
-          </p>
-        </div>
-
+    <DashboardShell
+      currentPath="/dashboard"
+      title={isAyizan ? 'Mon Tableau de Bord' : 'Mon Espace Client'}
+      subtitle={isAyizan ? 'Pilotez votre activité réseau, vos volumes et vos commissions.' : 'Retrouvez vos achats, votre profil et votre progression vers AYIZAN.'}
+    >
         {isAyizan ? (
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
@@ -109,7 +100,7 @@ export default function DashboardPage() {
               <div className="card p-6 flex flex-col gap-6">
                 <div>
                   <h2 className="font-semibold text-agri-dark mb-2">Mon Niveau</h2>
-                  <LevelBadge level={user?.mlmLevel || 'CUSTOMER'} size="lg" showDescription />
+                  <LevelBadge level={displayLevel} size="lg" showDescription />
                 </div>
                 <div>
                   <h3 className="font-semibold text-agri-dark mb-3">Quota Mensuel</h3>
@@ -240,7 +231,7 @@ export default function DashboardPage() {
                 <div className="grid sm:grid-cols-3 gap-3 mb-6">
                   <div className="rounded-2xl bg-white border border-gray-100 p-4">
                     <div className="text-sm font-semibold text-agri-dark">Étape 1</div>
-                    <div className="text-sm text-gray-500 mt-1">Acheter au moins 9,500 HTG de produits payés</div>
+                    <div className="text-sm text-gray-500 mt-1">Acheter au moins 9,000 HTG de produits payés</div>
                   </div>
                   <div className="rounded-2xl bg-white border border-gray-100 p-4">
                     <div className="text-sm font-semibold text-agri-dark">Étape 2</div>
@@ -284,7 +275,6 @@ export default function DashboardPage() {
             </div>
           </div>
         )}
-      </main>
-    </div>
+    </DashboardShell>
   );
 }

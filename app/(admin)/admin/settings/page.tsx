@@ -21,7 +21,15 @@ export default function AdminSettingsPage() {
                 <span className="font-mono bg-white px-2 py-1 rounded border text-agri-green-700">546</span>
               </div>
               <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
-                <span className="text-sm font-medium text-gray-700">Commission Directe (%)</span>
+                <span className="text-sm font-medium text-gray-700">Base 1 PSK</span>
+                <span className="font-mono bg-white px-2 py-1 rounded border text-agri-green-700">15 HTG</span>
+              </div>
+              <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+                <span className="text-sm font-medium text-gray-700">Réseau Niveau 1</span>
+                <span className="font-mono bg-white px-2 py-1 rounded border text-agri-green-700">20%</span>
+              </div>
+              <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+                <span className="text-sm font-medium text-gray-700">Réseau Niveau 2</span>
                 <span className="font-mono bg-white px-2 py-1 rounded border text-agri-green-700">10%</span>
               </div>
               <button disabled className="w-full mt-4 py-2 border border-agri-green-200 text-agri-green-600 rounded-lg hover:bg-agri-green-50 transition-colors opacity-50 cursor-not-allowed">

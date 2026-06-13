@@ -11,6 +11,7 @@
   "dependencies": {
     "@tanstack/react-query": "^5.17.15",
     "@tanstack/react-query-devtools": "^5.17.15",
+    "@vercel/analytics": "^2.0.1",
     "axios": "^1.6.5",
     "cloudinary": "^2.0.1",
     "next": "14.1.0",

@@ -189,12 +189,47 @@ export interface UsersListResponse {
   };
 }
 
+export interface DeliveryAgentHistory {
+  deliveryAgent: {
+    id: string;
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    isActive: boolean;
+    createdAt: string;
+  };
+  stats: {
+    total: number;
+    delivered: number;
+    failed: number;
+    onRoad: number;
+    pendingPickup: number;
+  };
+  orders: Array<{
+    id: string;
+    orderNumber: string;
+    status: string;
+    paymentMethod: string;
+    paymentStatus: string;
+    totalAmount: number;
+    createdAt: string;
+    deliveredAt?: string | null;
+    shippedAt?: string | null;
+    deliveryZone?: string | null;
+    customer: {
+      firstName: string;
+      lastName: string;
+    };
+  }>;
+}
+
 export interface AdminUserPayload {
   firstName: string;
   lastName: string;
   email: string;
   phone: string;
-  role: 'CUSTOMER' | 'AYIZAN' | 'ADMIN';
+  role: 'CUSTOMER' | 'AYIZAN' | 'BUYER' | 'DELIVERY_AGENT' | 'STOCK_MANAGER' | 'CASHIER' | 'ACCOUNTANT' | 'ADMIN';
   isActive?: boolean;
   password?: string;
 }
@@ -205,6 +240,11 @@ export type UpdateAdminUserPayload = Partial<AdminUserPayload>;
 // Get global stats for admin dashboard
 export const getAdminStats = async (): Promise<AdminStats> => {
   const { data } = await api.get('/admin/dashboard-stats');
+  return data.data;
+};
+
+export const getDeliveryAgentHistory = async (userId: string): Promise<DeliveryAgentHistory> => {
+  const { data } = await api.get(`/admin/users/${userId}/delivery-history`);
   return data.data;
 };
 
@@ -244,8 +284,13 @@ export const exportAdminReports = async (
 };
 
 // Get list of all users for admin
-export const getUsersList = async (page = 1, limit = 20, search = ''): Promise<UsersListResponse> => {
-  const { data } = await api.get('/admin/users', { params: { page, limit, search } });
+export const getUsersList = async (
+  page = 1,
+  limit = 20,
+  search = '',
+  role?: AdminUserPayload['role']
+): Promise<UsersListResponse> => {
+  const { data } = await api.get('/admin/users', { params: { page, limit, search, role } });
   return data.data;
 };
 

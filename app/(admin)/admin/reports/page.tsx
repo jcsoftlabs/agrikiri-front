@@ -64,6 +64,7 @@ export default function AdminReportsPage() {
   const [range, setRange] = useState<AdminReportsRange>('30d');
   const [customDates, setCustomDates] = useState({ startDate: '', endDate: '' });
   const [isExporting, setIsExporting] = useState<'sales' | 'commissions' | null>(null);
+  const [showMobileFilters, setShowMobileFilters] = useState(false);
   const [filters, setFilters] = useState({
     categoryId: '',
     productId: '',
@@ -265,7 +266,17 @@ export default function AdminReportsPage() {
           </div>
         )}
 
-        <div className="mb-6 rounded-3xl bg-white border border-gray-100 p-5 shadow-sm">
+        <div className="mb-4 lg:hidden">
+          <button
+            type="button"
+            onClick={() => setShowMobileFilters((current) => !current)}
+            className="w-full rounded-2xl border border-gray-200 bg-white px-4 py-3 text-left text-sm font-semibold text-agri-dark shadow-sm"
+          >
+            {showMobileFilters ? 'Masquer les filtres' : 'Afficher les filtres'}
+          </button>
+        </div>
+
+        <div className={`mb-6 rounded-3xl bg-white border border-gray-100 p-5 shadow-sm ${showMobileFilters ? 'block' : 'hidden lg:block'}`}>
           <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-4">
             <div>
               <label className="block text-sm font-semibold text-gray-700 mb-1.5">Catégorie</label>
@@ -361,10 +372,10 @@ export default function AdminReportsPage() {
                   <div className="text-sm text-gray-500">
                     Données ventes + MLM consolidées sur {range === 'custom' ? 'la période personnalisée' : RANGE_OPTIONS.find((option) => option.value === range)?.label.toLowerCase()}.
                   </div>
-                  <div className="flex gap-2">
-                    <Button
-                      type="button"
-                      variant="primary"
+                <div className="flex flex-col sm:flex-row gap-2">
+                  <Button
+                    type="button"
+                    variant="primary"
                       size="sm"
                       onClick={handleExportPdf}
                     >
@@ -499,6 +510,43 @@ export default function AdminReportsPage() {
                     <Line type="monotone" dataKey="previousSales" stroke="#D4AF37" strokeWidth={3} strokeDasharray="6 4" dot={{ r: 3 }} />
                   </LineChart>
                 </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="grid gap-4 lg:hidden">
+              <div className="rounded-3xl bg-white border border-gray-100 p-5 shadow-sm">
+                <h3 className="font-semibold text-agri-dark mb-4">Top produits</h3>
+                <div className="space-y-3">
+                  {data.topProducts.slice(0, 5).map((product, index) => (
+                    <div key={product.productId} className="rounded-2xl bg-agri-cream border border-gray-100 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="text-xs uppercase tracking-[0.2em] text-gray-400">#{index + 1}</div>
+                          <div className="font-semibold text-agri-dark mt-1">{product.name}</div>
+                          <div className="text-sm text-gray-500 mt-1">{product.quantity} unité(s)</div>
+                        </div>
+                        <div className="text-sm font-bold text-agri-green-700">
+                          {Math.round(product.amount).toLocaleString()} HTG
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              <div className="rounded-3xl bg-white border border-gray-100 p-5 shadow-sm">
+                <h3 className="font-semibold text-agri-dark mb-4">Statuts commandes</h3>
+                <div className="space-y-3">
+                  {data.ordersByStatus.map((item) => (
+                    <div key={item.status} className="rounded-2xl bg-agri-cream border border-gray-100 p-4 flex items-center justify-between gap-3">
+                      <div>
+                        <div className="font-semibold text-agri-dark">{STATUS_LABELS[item.status] || item.status}</div>
+                        <div className="text-sm text-gray-500 mt-1">{item.count} commande(s)</div>
+                      </div>
+                      <div className="text-lg font-bold text-agri-green-700">{item.count}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
 
@@ -679,7 +727,7 @@ export default function AdminReportsPage() {
               </div>
 
               {expandedSection === 'orders' && (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto hidden lg:block">
                   <table className="table-agri">
                     <thead>
                       <tr>
@@ -708,9 +756,32 @@ export default function AdminReportsPage() {
                   </table>
                 </div>
               )}
+              {expandedSection === 'orders' && (
+                <div className="space-y-3 lg:hidden">
+                  {data.details.orders.map((order) => (
+                    <div key={order.id} className="rounded-2xl bg-agri-cream border border-gray-100 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-mono text-xs font-bold text-gray-500">{order.orderNumber}</div>
+                          <div className="mt-1 font-semibold text-agri-dark">{order.customer}</div>
+                        </div>
+                        <div className="text-right text-sm">
+                          <div className="font-bold text-agri-dark">{Math.round(order.totalAmount).toLocaleString()} HTG</div>
+                          <div className="text-gray-400 mt-1">{new Date(order.createdAt).toLocaleDateString('fr-HT')}</div>
+                        </div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+                        <div><span className="text-gray-400 block">Statut</span><span className="font-medium text-agri-dark">{STATUS_LABELS[order.status] || order.status}</span></div>
+                        <div><span className="text-gray-400 block">Paiement</span><span className="font-medium text-agri-dark">{STATUS_LABELS[order.paymentStatus] || order.paymentStatus}</span></div>
+                        <div><span className="text-gray-400 block">Articles</span><span className="font-medium text-agri-dark">{order.itemCount}</span></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {expandedSection === 'products' && (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto hidden lg:block">
                   <table className="table-agri">
                     <thead>
                       <tr>
@@ -733,9 +804,23 @@ export default function AdminReportsPage() {
                   </table>
                 </div>
               )}
+              {expandedSection === 'products' && (
+                <div className="space-y-3 lg:hidden">
+                  {data.details.products.map((product) => (
+                    <div key={product.productId} className="rounded-2xl bg-agri-cream border border-gray-100 p-4">
+                      <div className="font-semibold text-agri-dark">{product.name}</div>
+                      <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+                        <div><span className="text-gray-400 block">Quantité</span><span className="font-medium text-agri-dark">{product.quantity}</span></div>
+                        <div><span className="text-gray-400 block">Montant</span><span className="font-medium text-agri-dark">{Math.round(product.amount).toLocaleString()} HTG</span></div>
+                        <div><span className="text-gray-400 block">Prix moyen</span><span className="font-medium text-agri-dark">{Math.round(product.averagePrice).toLocaleString()} HTG</span></div>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
 
               {expandedSection === 'commissions' && (
-                <div className="overflow-x-auto">
+                <div className="overflow-x-auto hidden lg:block">
                   <table className="table-agri">
                     <thead>
                       <tr>
@@ -760,6 +845,26 @@ export default function AdminReportsPage() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              )}
+              {expandedSection === 'commissions' && (
+                <div className="space-y-3 lg:hidden">
+                  {data.details.commissions.map((commission) => (
+                    <div key={commission.id} className="rounded-2xl bg-agri-cream border border-gray-100 p-4">
+                      <div className="flex items-start justify-between gap-3">
+                        <div>
+                          <div className="font-semibold text-agri-dark">{commission.ayizanName}</div>
+                          <div className="text-sm text-gray-500 mt-1">{commission.sourceName}</div>
+                        </div>
+                        <div className="text-sm font-bold text-agri-dark">{Math.round(commission.amount).toLocaleString()} HTG</div>
+                      </div>
+                      <div className="mt-3 grid grid-cols-3 gap-3 text-sm">
+                        <div><span className="text-gray-400 block">Type</span><span className="font-medium text-agri-dark">{COMMISSION_TYPE_LABELS[commission.type] || commission.type}</span></div>
+                        <div><span className="text-gray-400 block">Statut</span><span className="font-medium text-agri-dark">{commission.status}</span></div>
+                        <div><span className="text-gray-400 block">Date</span><span className="font-medium text-agri-dark">{new Date(commission.createdAt).toLocaleDateString('fr-HT')}</span></div>
+                      </div>
+                    </div>
+                  ))}
                 </div>
               )}
             </div>

@@ -259,9 +259,10 @@ export const getAllOrders = async (
   limit = 20,
   status?: string,
   paymentStatus?: string,
-  deliveryAgentId?: string
+  deliveryAgentId?: string,
+  q?: string
 ): Promise<OrdersListResponse> => {
-  const { data } = await api.get('/orders/all', { params: { page, limit, status, paymentStatus, deliveryAgentId } });
+  const { data } = await api.get('/orders/all', { params: { page, limit, status, paymentStatus, deliveryAgentId, q } });
   return {
     ...data.data,
     orders: (data.data.orders || []).map(normalizeOrder),

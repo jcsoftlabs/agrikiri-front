@@ -2,10 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { usePathname } from 'next/navigation';
 import { useAuthStore } from '@/store/authStore';
 
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
   const router = useRouter();
+  const pathname = usePathname();
   const user = useAuthStore((state) => state.user);
   const token = useAuthStore((state) => state.token);
   const isLoading = useAuthStore((state) => state.isLoading);
@@ -33,12 +35,24 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       return;
     }
 
-    if (user && user.role !== 'ADMIN') {
-      router.replace('/dashboard');
-    }
-  }, [effectiveToken, hasMounted, isLoading, router, user]);
+    if (!user) return;
 
-  if (!hasMounted || !effectiveToken || isLoading || !user || user.role !== 'ADMIN') {
+    if (user.role !== 'ADMIN' && user.role !== 'CASHIER' && user.role !== 'ACCOUNTANT') {
+      router.replace('/dashboard');
+      return;
+    }
+
+    if (user.role === 'CASHIER' && pathname !== '/admin/pos') {
+      router.replace('/admin/pos');
+      return;
+    }
+
+    if (user.role === 'ACCOUNTANT' && pathname !== '/admin/accounting') {
+      router.replace('/admin/accounting');
+    }
+  }, [effectiveToken, hasMounted, isLoading, pathname, router, user]);
+
+  if (!hasMounted || !effectiveToken || isLoading || !user || (user.role !== 'ADMIN' && user.role !== 'CASHIER' && user.role !== 'ACCOUNTANT')) {
     return (
       <div className="min-h-screen bg-agri-cream flex items-center justify-center p-6">
         <div className="text-center">

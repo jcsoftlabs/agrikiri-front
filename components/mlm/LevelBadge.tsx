@@ -18,6 +18,69 @@ const MLM_LEVEL_CONFIG: Record<string, {
     icon: '🛒',
     description: 'Acheteur',
   },
+  BUYER: {
+    name: 'Acheteur',
+    color: '#8B5E34',
+    bg: 'bg-amber-50',
+    border: 'border-amber-200',
+    text: 'text-amber-700',
+    icon: '🧾',
+    description: 'Achats terrain',
+  },
+  STOCK_MANAGER: {
+    name: 'Stock',
+    color: '#3f7d20',
+    bg: 'bg-lime-50',
+    border: 'border-lime-200',
+    text: 'text-lime-700',
+    icon: '🏬',
+    description: 'Gestionnaire de stock',
+  },
+  DELIVERY_AGENT: {
+    name: 'Livreur',
+    color: '#2563eb',
+    bg: 'bg-sky-50',
+    border: 'border-sky-200',
+    text: 'text-sky-700',
+    icon: '🚚',
+    description: 'Livraisons terrain',
+  },
+  ACCOUNTANT: {
+    name: 'Compta',
+    color: '#7c3aed',
+    bg: 'bg-violet-50',
+    border: 'border-violet-200',
+    text: 'text-violet-700',
+    icon: '📘',
+    description: 'Suivi comptable',
+  },
+  CASHIER: {
+    name: 'Caissier',
+    color: '#be123c',
+    bg: 'bg-rose-50',
+    border: 'border-rose-200',
+    text: 'text-rose-700',
+    icon: '🧾',
+    description: 'Point de vente',
+  },
+  ASSOCIATE: {
+    name: 'Associé',
+    color: '#0f766e',
+    bg: 'bg-teal-50',
+    border: 'border-teal-200',
+    text: 'text-teal-700',
+    icon: '🗳️',
+    description: 'Gouvernance',
+  },
+  ADMIN: {
+    name: 'Admin',
+    color: '#1f2937',
+    bg: 'bg-slate-50',
+    border: 'border-slate-200',
+    text: 'text-slate-700',
+    icon: '🛠️',
+    description: 'Administration',
+  },
   AYIZAN: {
     name: 'Ayizan',
     color: '#4A90D9',
@@ -105,7 +168,7 @@ export default function LevelBadge({
   showDescription = false,
   showIcon = true,
 }: LevelBadgeProps) {
-  const config = MLM_LEVEL_CONFIG[level] || MLM_LEVEL_CONFIG.AYIZAN;
+  const config = MLM_LEVEL_CONFIG[level] || MLM_LEVEL_CONFIG.CUSTOMER;
 
   const sizeClasses = {
     sm: 'text-xs px-2 py-0.5 gap-1',

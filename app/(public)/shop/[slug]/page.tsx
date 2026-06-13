@@ -6,17 +6,47 @@ import { useRouter } from 'next/navigation';
 import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import Button from '@/components/ui/Button';
+import CartQuickDrawer from '@/components/ui/CartQuickDrawer';
 import { getProductBySlug } from '@/lib/services/products';
 import { useCartStore } from '@/store/cartStore';
 import toast from 'react-hot-toast';
 
-const USD_RATE = 132;
+const USD_RATE = 130;
+
+function getTieredUnitPrice(
+  basePrice: number,
+  quantity: number,
+  pricingTiers: Array<{ minQuantity: number; maxQuantity?: number | null; price: number | string }> = []
+) {
+  const matchedTier = pricingTiers
+    .slice()
+    .sort((a, b) => a.minQuantity - b.minQuantity)
+    .find((tier) => quantity >= tier.minQuantity && (tier.maxQuantity == null || quantity <= tier.maxQuantity));
+
+  return matchedTier ? Number(matchedTier.price) : basePrice;
+}
+
+function getTierLabel(minQuantity: number, maxQuantity?: number | null) {
+  return maxQuantity == null ? `${minQuantity}+` : `${minQuantity} à ${maxQuantity}`;
+}
+
+function getLowestTierPrice(
+  basePrice: number,
+  pricingTiers: Array<{ price: number | string }> = []
+) {
+  if (!pricingTiers.length) {
+    return basePrice;
+  }
+
+  return Math.min(basePrice, ...pricingTiers.map((tier) => Number(tier.price)));
+}
 
 export default function ProductPage({ params }: { params: { slug: string } }) {
   const router = useRouter();
   const [quantity, setQuantity] = useState(1);
   const [activeImage, setActiveImage] = useState(0);
   const [selectedVariantId, setSelectedVariantId] = useState<string>('');
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const addItem = useCartStore((state) => state.addItem);
 
   const { data: product, isLoading, isError } = useQuery({
@@ -77,13 +107,16 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
     activeVariants.find((variant) => variant.isDefault) ??
     activeVariants[0];
 
-  const displayedPrice = Number(selectedVariant?.price ?? product.price);
+  const baseDisplayedPrice = Number(selectedVariant?.price ?? product.price);
+  const pricingTiers = selectedVariant?.pricingTiers || [];
+  const displayedPrice = getTieredUnitPrice(baseDisplayedPrice, quantity, pricingTiers);
   const displayedVP = Number(selectedVariant?.vpPoints ?? product.vpPoints);
   const displayedWeight = Number(selectedVariant?.weightLbs ?? product.weightLbs);
   const availableStock = selectedVariant?.stockQuantity ?? product.stockQuantity;
   const maxQuantity = Math.max(1, availableStock);
   const isOutOfStock = availableStock < 1;
   const totalPrice = displayedPrice * quantity;
+  const hasTieredPricing = pricingTiers.length > 0;
 
   const handleAddToCart = () => {
     if (isOutOfStock) {
@@ -99,29 +132,69 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
       variantId: selectedVariant?.id,
       variantLabel: selectedVariant?.label,
       unitPrice: displayedPrice,
+      baseUnitPrice: baseDisplayedPrice,
       vpPoints: displayedVP,
       weightLbs: displayedWeight,
       quantity,
       maxStock: availableStock,
+      pricingTiers,
     });
 
-    toast.success(
-      selectedVariant?.label
-        ? `${quantity} x ${product.name} (${selectedVariant.label}) ajouté(s) au panier`
-        : `${quantity} x ${product.name} ajouté(s) au panier`
-    );
+    setDrawerOpen(true);
   };
 
   const handleBuyNow = () => {
-    handleAddToCart();
-    if (!isOutOfStock) {
-      router.push('/cart');
+    if (isOutOfStock) {
+      toast.error('Cette variante est actuellement en rupture de stock.');
+      return;
     }
+
+    addItem({
+      productId: product.id,
+      productSlug: product.slug,
+      productName: product.name,
+      imageUrl: product.images?.[0]?.url,
+      variantId: selectedVariant?.id,
+      variantLabel: selectedVariant?.label,
+      unitPrice: displayedPrice,
+      baseUnitPrice: baseDisplayedPrice,
+      vpPoints: displayedVP,
+      weightLbs: displayedWeight,
+      quantity,
+      maxStock: availableStock,
+      pricingTiers,
+    });
+
+    toast.success('Produit ajouté. Nous vous emmenons directement au checkout.');
+    router.push('/cart?checkout=1');
+  };
+
+  const handleQuantityInputChange = (value: string) => {
+    if (!value.trim()) {
+      setQuantity(1);
+      return;
+    }
+
+    const parsedValue = Number.parseInt(value, 10);
+    if (Number.isNaN(parsedValue)) {
+      return;
+    }
+
+    setQuantity(Math.min(maxQuantity, Math.max(1, parsedValue)));
   };
 
   return (
     <div className="min-h-screen bg-agri-cream">
       <Navbar />
+      <CartQuickDrawer
+        open={drawerOpen}
+        onClose={() => setDrawerOpen(false)}
+        title="Ajouté au panier"
+        description="Votre sélection est prête. Vous pouvez ouvrir le panier ou finaliser tout de suite."
+        productName={product.name}
+        variantLabel={selectedVariant?.label}
+        quantity={quantity}
+      />
 
       <div className="bg-gradient-to-b from-agri-green-50 via-agri-cream to-agri-cream pt-24 pb-8 border-b border-agri-green-100">
         <div className="container-agri">
@@ -149,9 +222,6 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
             </div>
 
             <h1 className="font-display text-4xl md:text-5xl text-agri-dark mb-4">{product.name}</h1>
-            <p className="text-gray-600 text-lg leading-relaxed max-w-2xl">
-              {product.description}
-            </p>
           </div>
         </div>
       </div>
@@ -228,6 +298,11 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
                       ≈ ${(displayedPrice / USD_RATE).toFixed(2)} USD
                     </span>
                   </div>
+                  {hasTieredPricing && (
+                    <p className="mt-2 text-sm text-gray-500">
+                      Prix unitaire ajusté automatiquement selon la quantité choisie.
+                    </p>
+                  )}
                 </div>
                 <div className="badge bg-agri-gold-300/30 text-agri-gold-700 border border-agri-gold-300 px-4 py-2 text-sm">
                   {displayedVP} PSK
@@ -255,6 +330,12 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
                   <div className="grid sm:grid-cols-2 gap-3">
                     {activeVariants.map((variant) => {
                       const isSelected = selectedVariant?.id === variant.id;
+                      const variantBasePrice = Number(variant.price);
+                      const variantLowestTierPrice = getLowestTierPrice(
+                        variantBasePrice,
+                        variant.pricingTiers || []
+                      );
+                      const hasDiscountedTier = variantLowestTierPrice < variantBasePrice;
                       return (
                         <button
                           key={variant.id || variant.label}
@@ -269,10 +350,15 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
                           <div className="font-semibold text-lg text-agri-dark">{variant.label}</div>
                           <div className="flex items-center justify-between mt-3 text-sm">
                             <span className="text-agri-green-700 font-semibold">
-                              {Number(variant.price).toLocaleString()} HTG
+                              {variantBasePrice.toLocaleString()} HTG
                             </span>
                             <span className="text-gray-400">{Number(variant.weightLbs)} Lbs</span>
                           </div>
+                          {hasDiscountedTier ? (
+                            <p className="mt-2 text-xs text-gray-500">
+                              Prix dégressif possible jusqu’à {variantLowestTierPrice.toLocaleString()} HTG selon quantité
+                            </p>
+                          ) : null}
                         </button>
                       );
                     })}
@@ -295,9 +381,17 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
                     >
                       −
                     </button>
-                    <span className="px-7 py-4 font-bold text-agri-dark min-w-[72px] text-center text-lg">
-                      {quantity}
-                    </span>
+                    <input
+                      id="qty-input"
+                      type="number"
+                      min="1"
+                      max={maxQuantity}
+                      inputMode="numeric"
+                      value={quantity}
+                      onChange={(e) => handleQuantityInputChange(e.target.value)}
+                      className="w-20 bg-transparent px-3 py-4 font-bold text-agri-dark text-center text-lg outline-none [appearance:textfield] [&::-webkit-inner-spin-button]:appearance-none [&::-webkit-outer-spin-button]:appearance-none"
+                      aria-label="Quantité"
+                    />
                     <button
                       id="qty-plus"
                       type="button"
@@ -319,6 +413,50 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
                   </div>
                 </div>
               </div>
+
+              {hasTieredPricing && (
+                <div className="mb-7 rounded-2xl border border-agri-gold-300/50 bg-agri-gold-300/10 p-4">
+                  <div className="flex items-center justify-between gap-3 mb-3">
+                    <div>
+                      <h3 className="font-semibold text-agri-dark">Tarification par quantité</h3>
+                      <p className="text-sm text-gray-500">Le prix unitaire baisse selon le volume commandé.</p>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-xs uppercase tracking-[0.16em] text-gray-400">Prix appliqué</div>
+                      <div className="font-bold text-agri-green-700">{displayedPrice.toLocaleString()} HTG</div>
+                    </div>
+                  </div>
+                  <div className="overflow-hidden rounded-2xl border border-white/70 bg-white">
+                    <div className="grid grid-cols-[1.15fr_0.85fr] bg-agri-green-50 px-4 py-3 text-xs font-semibold uppercase tracking-[0.16em] text-agri-green-700">
+                      <span>Quantité</span>
+                      <span className="text-right">Prix / unité</span>
+                    </div>
+                    <div className="divide-y divide-gray-100">
+                      {pricingTiers[0].minQuantity > 1 ? (
+                        <div className={`grid grid-cols-[1.15fr_0.85fr] px-4 py-3 text-sm ${quantity < pricingTiers[0].minQuantity ? 'bg-agri-cream/70' : ''}`}>
+                          <span>1 à {pricingTiers[0].minQuantity - 1}</span>
+                          <span className="text-right font-medium text-agri-dark">{baseDisplayedPrice.toLocaleString()} HTG</span>
+                        </div>
+                      ) : null}
+                      {pricingTiers.map((tier) => {
+                        const isActiveTier =
+                          quantity >= tier.minQuantity && (tier.maxQuantity == null || quantity <= tier.maxQuantity);
+                        return (
+                          <div
+                            key={`${tier.minQuantity}-${tier.maxQuantity ?? 'plus'}`}
+                            className={`grid grid-cols-[1.15fr_0.85fr] px-4 py-3 text-sm ${isActiveTier ? 'bg-agri-green-50' : ''}`}
+                          >
+                            <span>{getTierLabel(tier.minQuantity, tier.maxQuantity)}</span>
+                            <span className="text-right font-semibold text-agri-green-700">
+                              {Number(tier.price).toLocaleString()} HTG
+                            </span>
+                          </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                </div>
+              )}
 
               <div className="grid sm:grid-cols-2 gap-3">
                 <Button
@@ -345,6 +483,15 @@ export default function ProductPage({ params }: { params: { slug: string } }) {
             </div>
 
             <div className="bg-white rounded-2xl p-6 border border-gray-100">
+              <div className="rounded-2xl border border-agri-green-100 bg-agri-green-50 p-4 mb-5">
+                <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-2 text-sm">
+                  <div>
+                    <p className="font-semibold text-agri-dark">Livraison AGRIKIRI</p>
+                    <p className="text-gray-600">Estimation locale de 24 à 72 heures selon la zone.</p>
+                  </div>
+                  <span className="text-agri-green-700 font-medium">Checkout guidé disponible</span>
+                </div>
+              </div>
               <h3 className="font-semibold text-agri-dark mb-3">Description</h3>
               <p className="text-gray-600 leading-relaxed">{product.description}</p>
               <div className="grid sm:grid-cols-2 gap-3 mt-5 pt-5 border-t border-gray-100">

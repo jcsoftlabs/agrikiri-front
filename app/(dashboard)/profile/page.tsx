@@ -5,7 +5,9 @@ import Link from 'next/link';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import toast from 'react-hot-toast';
 import AddressForm from '@/components/account/AddressForm';
+import DashboardShell from '@/components/dashboard/DashboardShell';
 import { createEmptyAddressForm, formatPhoneForDisplay } from '@/lib/address-utils';
+import api from '@/lib/api';
 import {
   createAddress,
   deleteAddress,
@@ -17,10 +19,48 @@ import {
 import { useAuthStore } from '@/store/authStore';
 
 export default function ProfilePage() {
-  const { user, logout } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const queryClient = useQueryClient();
+  const displayLevel = user?.role === 'AYIZAN' ? (user?.mlmLevel || 'AYIZAN') : 'CUSTOMER';
+  const returnHref =
+    user?.role === 'ADMIN'
+      ? '/admin'
+      : user?.role === 'CASHIER'
+        ? '/admin/pos'
+        : user?.role === 'ACCOUNTANT'
+          ? '/admin/accounting'
+          : user?.role === 'STOCK_MANAGER'
+            ? '/stock'
+            : user?.role === 'BUYER'
+              ? '/buyer'
+              : user?.role === 'DELIVERY_AGENT'
+                ? '/delivery'
+                : user?.role === 'ASSOCIATE'
+                  ? '/board'
+                  : '/dashboard';
+  const returnLabel =
+    user?.role === 'ADMIN'
+      ? 'Retour à l’admin'
+      : user?.role === 'CASHIER'
+        ? 'Retour au POS'
+        : user?.role === 'ACCOUNTANT'
+          ? 'Retour à la comptabilité'
+          : user?.role === 'STOCK_MANAGER'
+            ? 'Retour au stock'
+            : user?.role === 'BUYER'
+              ? 'Retour aux achats terrain'
+              : user?.role === 'DELIVERY_AGENT'
+                ? 'Retour aux livraisons'
+                : user?.role === 'ASSOCIATE'
+                  ? 'Retour à l’espace associés'
+                  : 'Retour au tableau de bord';
   const [editingAddress, setEditingAddress] = useState<CustomerAddress | null>(null);
   const [showAddressForm, setShowAddressForm] = useState(false);
+  const [profileForm, setProfileForm] = useState({
+    firstName: user?.firstName || '',
+    lastName: user?.lastName || '',
+    phone: user?.phone?.replace(/\s+/g, '') || '',
+  });
   const [formValue, setFormValue] = useState(
     createEmptyAddressForm({
       fullName: user ? `${user.firstName} ${user.lastName}`.trim() : '',
@@ -46,6 +86,30 @@ export default function ProfilePage() {
       countryCode: user.phone?.startsWith('+1') ? 'US' : current.countryCode,
     }));
   }, [editingAddress, showAddressForm, user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    setProfileForm({
+      firstName: user.firstName || '',
+      lastName: user.lastName || '',
+      phone: user.phone?.replace(/\s+/g, '') || '',
+    });
+  }, [user]);
+
+  const updateProfileMutation = useMutation({
+    mutationFn: async () => {
+      const response = await api.patch('/auth/me', profileForm);
+      return response.data?.data;
+    },
+    onSuccess: (updatedUser) => {
+      setUser(updatedUser);
+      toast.success('Vos informations ont été mises à jour.');
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Impossible de mettre à jour votre profil.');
+    },
+  });
 
   const createMutation = useMutation({
     mutationFn: createAddress,
@@ -133,22 +197,25 @@ export default function ProfilePage() {
     createMutation.mutate(formValue);
   };
 
-  return (
-    <div className="min-h-screen bg-agri-cream flex flex-col items-center py-12 px-4">
-      <div className="w-full max-w-6xl">
-        <div className="mb-6 flex items-center justify-between">
-          <Link href="/dashboard" className="text-agri-green-600 hover:text-agri-green-800 font-medium">
-            ← Retour au tableau de bord
-          </Link>
-          <button onClick={logout} className="text-gray-500 hover:text-red-500 text-sm flex items-center gap-2 transition-colors font-medium">
-            <span>↩</span> Déconnexion
-          </button>
-        </div>
+  const handleProfileSubmit = (event: React.FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    updateProfileMutation.mutate();
+  };
 
+  return (
+    <DashboardShell
+      currentPath="/profile"
+      title="Mon Profil"
+      subtitle="Gérez vos informations, vos adresses de livraison et votre compte client."
+      headerAction={
+        <Link href={returnHref} className="inline-flex items-center rounded-2xl border border-gray-200 bg-white px-4 py-2 text-sm font-semibold text-gray-600 transition-colors hover:border-agri-green-300 hover:text-agri-green-700">
+          ← {returnLabel}
+        </Link>
+      }
+      contentClassName="w-full max-w-6xl mx-auto"
+    >
         <div className="grid gap-6 xl:grid-cols-[0.88fr_1.12fr]">
           <div className="card p-8 bg-white shadow-xl rounded-2xl border border-gray-100">
-            <h1 className="font-display text-3xl text-agri-dark mb-6">Mon Profil</h1>
-
             <div className="flex items-center gap-6 mb-8 pb-8 border-b border-gray-100">
               <div className="w-24 h-24 bg-agri-green-100 rounded-full flex items-center justify-center text-4xl overflow-hidden shadow-inner">
                 {user?.avatarUrl ? <img src={user.avatarUrl} alt="avatar" className="w-full h-full object-cover" /> : '👤'}
@@ -157,12 +224,63 @@ export default function ProfilePage() {
                 <h2 className="text-2xl font-bold text-gray-800">{user ? `${user.firstName} ${user.lastName}` : 'Utilisateur'}</h2>
                 <p className="text-gray-500 mt-1">{user?.email}</p>
                 <div className="mt-2 inline-flex items-center gap-2 px-3 py-1 bg-agri-green-50 text-agri-green-700 rounded-full text-sm font-medium">
-                  Niveau : {user?.mlmLevel || 'Membre'}
+                  Niveau : {displayLevel === 'CUSTOMER' ? 'Client' : displayLevel}
                 </div>
               </div>
             </div>
 
             <div className="space-y-4">
+              <form onSubmit={handleProfileSubmit} className="space-y-4 rounded-2xl border border-gray-100 bg-agri-cream/40 p-5">
+                <div className="flex items-center justify-between gap-4">
+                  <div>
+                    <h3 className="font-semibold text-lg text-agri-dark">Informations personnelles</h3>
+                    <p className="text-sm text-gray-500">Mettez à jour votre nom et votre numéro principal.</p>
+                  </div>
+                  <button
+                    type="submit"
+                    className="btn-primary !px-4 !py-2"
+                    disabled={updateProfileMutation.isPending}
+                  >
+                    {updateProfileMutation.isPending ? 'Enregistrement...' : 'Enregistrer'}
+                  </button>
+                </div>
+
+                <div className="grid gap-4 md:grid-cols-2">
+                  <label className="space-y-2">
+                    <span className="text-sm font-medium text-gray-600">Prénom</span>
+                    <input
+                      type="text"
+                      value={profileForm.firstName}
+                      onChange={(event) => setProfileForm((current) => ({ ...current, firstName: event.target.value }))}
+                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-800 outline-none transition focus:border-agri-green-400 focus:ring-2 focus:ring-agri-green-100"
+                      placeholder="Votre prénom"
+                    />
+                  </label>
+
+                  <label className="space-y-2">
+                    <span className="text-sm font-medium text-gray-600">Nom</span>
+                    <input
+                      type="text"
+                      value={profileForm.lastName}
+                      onChange={(event) => setProfileForm((current) => ({ ...current, lastName: event.target.value }))}
+                      className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-800 outline-none transition focus:border-agri-green-400 focus:ring-2 focus:ring-agri-green-100"
+                      placeholder="Votre nom"
+                    />
+                  </label>
+                </div>
+
+                <label className="space-y-2 block">
+                  <span className="text-sm font-medium text-gray-600">Téléphone principal</span>
+                  <input
+                    type="tel"
+                    value={profileForm.phone}
+                    onChange={(event) => setProfileForm((current) => ({ ...current, phone: event.target.value }))}
+                    className="w-full rounded-xl border border-gray-200 bg-white px-4 py-3 text-gray-800 outline-none transition focus:border-agri-green-400 focus:ring-2 focus:ring-agri-green-100"
+                    placeholder="+50936123456"
+                  />
+                </label>
+              </form>
+
               <div className="bg-gray-50 p-4 rounded-xl border border-gray-100">
                 <div className="text-sm text-gray-500 mb-1">Téléphone principal</div>
                 <div className="font-medium">{user?.phone || 'Non renseigné'}</div>
@@ -284,7 +402,6 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
-      </div>
-    </div>
+    </DashboardShell>
   );
 }

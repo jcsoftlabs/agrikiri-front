@@ -7,10 +7,10 @@ import Navbar from '@/components/layout/Navbar';
 import Footer from '@/components/layout/Footer';
 import Button from '@/components/ui/Button';
 import { clearPendingPaymentSession, getPendingPaymentSession } from '@/lib/payment-session';
-import { Order, getMyOrders, verifyOrderPayment } from '@/lib/services/orders';
+import { Order, getMyOrders, markOrderPaymentFailed, verifyOrderPayment } from '@/lib/services/orders';
 import { useAuthStore } from '@/store/authStore';
 
-type PaymentReturnState = 'loading' | 'success' | 'pending' | 'error' | 'missing';
+type PaymentReturnState = 'loading' | 'success' | 'pending' | 'error' | 'missing' | 'cancelled' | 'failed';
 
 const METHOD_LABELS: Record<string, string> = {
   PLOPPLOP: 'PLOP PLOP',
@@ -32,7 +32,49 @@ export default function PaymentReturnPage() {
   const [message, setMessage] = useState('Nous vérifions votre paiement en ce moment.');
   const [activeOrder, setActiveOrder] = useState<Order | null>(null);
   const [isRetrying, setIsRetrying] = useState(false);
+  const [isMarkingFailed, setIsMarkingFailed] = useState(false);
   const hasStartedRef = useRef(false);
+  const [returnReference, setReturnReference] = useState<string | null>(null);
+  const [returnStatusHint, setReturnStatusHint] = useState<'success' | 'cancelled' | 'failed' | null>(null);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const rawStatus = (
+      params.get('status') ||
+      params.get('payment_status') ||
+      params.get('paymentStatus') ||
+      params.get('result') ||
+      ''
+    ).toLowerCase();
+    const cancelledFlag = params.get('cancelled');
+    const failedFlag = params.get('failed');
+
+    setReturnReference(
+      params.get('reference') ||
+      params.get('referenceId') ||
+      params.get('orderNumber') ||
+      null
+    );
+
+    if (['success', 'ok', 'paid', 'completed'].includes(rawStatus)) {
+      setReturnStatusHint('success');
+    } else if (
+      ['cancelled', 'canceled', 'abort', 'aborted'].includes(rawStatus) ||
+      cancelledFlag === '1' ||
+      cancelledFlag === 'true'
+    ) {
+      setReturnStatusHint('cancelled');
+    } else if (
+      ['failed', 'error', 'declined', 'expired'].includes(rawStatus) ||
+      failedFlag === '1' ||
+      failedFlag === 'true'
+    ) {
+      setReturnStatusHint('failed');
+    } else {
+      setReturnStatusHint(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (typeof window === 'undefined') return;
@@ -72,6 +114,9 @@ export default function PaymentReturnPage() {
       const candidateOrders = ordersData.orders || [];
 
       const targetOrder =
+        (returnReference
+          ? candidateOrders.find((order) => order.orderNumber === returnReference)
+          : null) ||
         (pendingSession?.orderId
           ? candidateOrders.find((order) => order.id === pendingSession.orderId)
           : null) ||
@@ -91,6 +136,19 @@ export default function PaymentReturnPage() {
       }
 
       setActiveOrder(targetOrder);
+
+      if (returnStatusHint === 'cancelled' || returnStatusHint === 'failed') {
+        const failedOrder = await markOrderPaymentFailed(targetOrder.id, returnStatusHint);
+        setActiveOrder(failedOrder);
+        clearPendingPaymentSession(failedOrder.id);
+        setStatus(returnStatusHint);
+        setMessage(
+          returnStatusHint === 'cancelled'
+            ? 'Le paiement a été annulé. Votre commande n’a pas été confirmée.'
+            : 'Le paiement a échoué ou a expiré. Votre commande n’a pas été confirmée.'
+        );
+        return;
+      }
 
       const verification = await verifyOrderPayment(targetOrder.id);
       setActiveOrder(verification.order);
@@ -118,7 +176,44 @@ export default function PaymentReturnPage() {
     if (!token || !user || isLoading || hasStartedRef.current) return;
     hasStartedRef.current = true;
     void resolvePayment();
-  }, [isLoading, token, user]);
+  }, [isLoading, returnReference, returnStatusHint, token, user]);
+
+  const handleMarkFailed = async (reason: 'cancelled' | 'failed') => {
+    if (!activeOrder) return;
+
+    try {
+      setIsMarkingFailed(true);
+      const updatedOrder = await markOrderPaymentFailed(activeOrder.id, reason);
+      setActiveOrder(updatedOrder);
+      clearPendingPaymentSession(updatedOrder.id);
+      setStatus(reason);
+      setMessage(
+        reason === 'cancelled'
+          ? 'Le paiement a été annulé. Vous pouvez reprendre le checkout quand vous voulez.'
+          : 'Le paiement a été marqué comme échoué. Vous pouvez réessayer avec un nouveau paiement.'
+      );
+    } catch (error: any) {
+      setStatus('error');
+      setMessage(error.response?.data?.message || 'Impossible de mettre à jour le statut du paiement.');
+    } finally {
+      setIsMarkingFailed(false);
+    }
+  };
+
+  const handleRetryPayment = () => {
+    const pendingSession = getPendingPaymentSession();
+    if (pendingSession?.paymentUrl) {
+      window.location.href = pendingSession.paymentUrl;
+      return;
+    }
+
+    if (activeOrder) {
+      router.push('/cart?checkout=1');
+      return;
+    }
+
+    router.push('/shop');
+  };
 
   const toneClasses = {
     loading: 'border-blue-100 bg-blue-50 text-blue-700',
@@ -126,6 +221,8 @@ export default function PaymentReturnPage() {
     pending: 'border-amber-100 bg-amber-50 text-amber-700',
     error: 'border-red-100 bg-red-50 text-red-700',
     missing: 'border-slate-200 bg-slate-50 text-slate-700',
+    cancelled: 'border-orange-100 bg-orange-50 text-orange-700',
+    failed: 'border-red-100 bg-red-50 text-red-700',
   }[status];
 
   const title = {
@@ -134,6 +231,8 @@ export default function PaymentReturnPage() {
     pending: 'Paiement en attente',
     error: 'Vérification impossible',
     missing: 'Aucune commande à confirmer',
+    cancelled: 'Paiement annulé',
+    failed: 'Paiement échoué',
   }[status];
 
   return (
@@ -174,6 +273,31 @@ export default function PaymentReturnPage() {
                 >
                   Revérifier maintenant
                 </Button>
+              )}
+
+              {(status === 'pending' || status === 'cancelled' || status === 'failed') && (
+                <Button variant="primary" onClick={handleRetryPayment}>
+                  Reprendre le paiement
+                </Button>
+              )}
+
+              {status === 'pending' && activeOrder && (
+                <>
+                  <Button
+                    variant="secondary"
+                    loading={isMarkingFailed}
+                    onClick={() => void handleMarkFailed('cancelled')}
+                  >
+                    J’ai annulé le paiement
+                  </Button>
+                  <Button
+                    variant="secondary"
+                    loading={isMarkingFailed}
+                    onClick={() => void handleMarkFailed('failed')}
+                  >
+                    Le paiement a échoué
+                  </Button>
+                </>
               )}
 
               {activeOrder && (
@@ -221,6 +345,8 @@ export default function PaymentReturnPage() {
               {status === 'pending' && 'Si vous avez quitté le paiement trop tôt ou si la plateforme prend un peu de temps, cette commande peut rester en attente quelques minutes.'}
               {status === 'error' && 'En cas de doute, revérifiez une seconde fois puis consultez la commande pour voir si le statut a changé côté boutique.'}
               {status === 'missing' && 'Nous n’avons pas retrouvé de commande en ligne à reprendre. Vous pouvez consulter votre historique ou relancer un achat.'}
+              {status === 'cancelled' && 'Le paiement a été interrompu avant confirmation. La commande reste consultable, mais elle n’est pas confirmée tant qu’un nouveau paiement n’a pas abouti.'}
+              {status === 'failed' && 'Le paiement n’a pas abouti ou a expiré. Vous pouvez relancer un nouveau paiement depuis cette page ou revenir au checkout.'}
               {status === 'loading' && 'Le système compare votre dernière session de paiement avec vos commandes en attente pour reprendre exactement le bon dossier.'}
             </div>
           </aside>

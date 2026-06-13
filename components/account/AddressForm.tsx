@@ -2,6 +2,8 @@
 
 import { AddressFormValue, getCountryMeta, getRegionOptions } from '@/lib/address-utils';
 
+type AddressFieldErrors = Partial<Record<'fullName' | 'phoneNumber' | 'addressLine1' | 'city' | 'stateRegion' | 'postalCode', string>>;
+
 interface AddressFormProps {
   value: AddressFormValue;
   onChange: (value: AddressFormValue) => void;
@@ -12,6 +14,7 @@ interface AddressFormProps {
   showDefaultToggle?: boolean;
   wrapInForm?: boolean;
   showActions?: boolean;
+  errors?: AddressFieldErrors;
 }
 
 export default function AddressForm({
@@ -24,9 +27,11 @@ export default function AddressForm({
   showDefaultToggle = true,
   wrapInForm = true,
   showActions = true,
+  errors = {},
 }: AddressFormProps) {
   const countryMeta = getCountryMeta(value.countryCode);
   const regionOptions = getRegionOptions(value.countryCode);
+  const inputClass = (hasError?: boolean) => `${hasError ? 'input border-red-400 focus:border-red-500 focus:ring-red-100' : 'input'}`;
 
   const updateField = <K extends keyof AddressFormValue>(field: K, fieldValue: AddressFormValue[K]) => {
     if (field === 'countryCode') {
@@ -41,6 +46,13 @@ export default function AddressForm({
       return;
     }
 
+    if (field === 'phoneNumber') {
+      const digitsOnly = String(fieldValue).replace(/\D/g, '');
+      const maxLength = value.countryCode === 'HT' ? 8 : 10;
+      onChange({ ...value, phoneNumber: digitsOnly.slice(0, maxLength) });
+      return;
+    }
+
     onChange({ ...value, [field]: fieldValue });
   };
 
@@ -48,13 +60,12 @@ export default function AddressForm({
     <div className="space-y-4">
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         <div>
-          <label className="block text-sm font-medium text-gray-700 mb-1.5">Libellé</label>
+          <label className="block text-sm font-medium text-gray-700 mb-1.5">Libellé <span className="text-gray-400">(optionnel)</span></label>
           <input
             className="input"
             value={value.label}
             onChange={(e) => updateField('label', e.target.value)}
             placeholder="Maison, Travail..."
-            required
           />
         </div>
         <div>
@@ -74,37 +85,48 @@ export default function AddressForm({
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Nom complet</label>
           <input
-            className="input"
+            className={inputClass(Boolean(errors.fullName))}
             value={value.fullName}
             onChange={(e) => updateField('fullName', e.target.value)}
             placeholder="Nom du destinataire"
             required
           />
+          {errors.fullName && <p className="mt-1 text-xs text-red-500">{errors.fullName}</p>}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Téléphone</label>
-          <div className="grid grid-cols-[96px_1fr] gap-2">
-            <input className="input bg-gray-50" value={value.phoneCountryCode} readOnly />
+          <div className="flex items-stretch gap-2 w-full">
+            <div className="input bg-gray-50 font-medium text-center shrink-0 w-[88px] flex items-center justify-center">
+              {value.phoneCountryCode}
+            </div>
             <input
-              className="input"
+              className={`${inputClass(Boolean(errors.phoneNumber))} flex-1 min-w-0 w-full font-medium`}
               value={value.phoneNumber}
               onChange={(e) => updateField('phoneNumber', e.target.value)}
               placeholder={value.countryCode === 'HT' ? '36123456' : '3055550123'}
+              inputMode="numeric"
+              autoComplete="tel-national"
+              maxLength={value.countryCode === 'HT' ? 8 : 10}
               required
             />
           </div>
+          <p className="mt-1 text-xs text-gray-400">
+            {value.countryCode === 'HT' ? '8 chiffres attendus pour Haïti.' : '10 chiffres attendus pour les États-Unis.'}
+          </p>
+          {errors.phoneNumber && <p className="mt-1 text-xs text-red-500">{errors.phoneNumber}</p>}
         </div>
       </div>
 
       <div>
         <label className="block text-sm font-medium text-gray-700 mb-1.5">Adresse</label>
         <input
-          className="input"
+          className={inputClass(Boolean(errors.addressLine1))}
           value={value.addressLine1}
           onChange={(e) => updateField('addressLine1', e.target.value)}
           placeholder="Rue, numéro, quartier..."
           required
         />
+        {errors.addressLine1 && <p className="mt-1 text-xs text-red-500">{errors.addressLine1}</p>}
       </div>
 
       <div>
@@ -121,17 +143,18 @@ export default function AddressForm({
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">Ville</label>
           <input
-            className="input"
+            className={inputClass(Boolean(errors.city))}
             value={value.city}
             onChange={(e) => updateField('city', e.target.value)}
             placeholder={value.countryCode === 'HT' ? 'Port-au-Prince' : 'Miami'}
             required
           />
+          {errors.city && <p className="mt-1 text-xs text-red-500">{errors.city}</p>}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">{countryMeta.stateLabel}</label>
           <select
-            className="input"
+            className={inputClass(Boolean(errors.stateRegion))}
             value={value.stateRegion}
             onChange={(e) => updateField('stateRegion', e.target.value)}
             required
@@ -141,16 +164,18 @@ export default function AddressForm({
               <option key={region} value={region}>{region}</option>
             ))}
           </select>
+          {errors.stateRegion && <p className="mt-1 text-xs text-red-500">{errors.stateRegion}</p>}
         </div>
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-1.5">{countryMeta.postalCodeLabel}</label>
           <input
-            className="input"
+            className={inputClass(Boolean(errors.postalCode))}
             value={value.postalCode}
             onChange={(e) => updateField('postalCode', e.target.value)}
             placeholder={value.countryCode === 'US' ? '33101' : 'Optionnel'}
             required={countryMeta.postalCodeRequired}
           />
+          {errors.postalCode && <p className="mt-1 text-xs text-red-500">{errors.postalCode}</p>}
         </div>
       </div>
 
