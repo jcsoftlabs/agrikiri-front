@@ -60,6 +60,20 @@ function formatWeight(value: number) {
   }).format(value);
 }
 
+function getApiErrorMessage(error: any, fallback: string) {
+  const validationErrors = error?.response?.data?.errors;
+  if (Array.isArray(validationErrors) && validationErrors.length > 0) {
+    return validationErrors
+      .map((entry: { field?: string; message?: string }) =>
+        entry?.field ? `${entry.field}: ${entry.message || 'Valeur invalide'}` : entry?.message
+      )
+      .filter(Boolean)
+      .join(' · ');
+  }
+
+  return error?.response?.data?.message || fallback;
+}
+
 async function triggerStockReportDownload(reportId: string, title: string) {
   const blob = await downloadStockReportPdf(reportId);
   const url = window.URL.createObjectURL(blob);
@@ -226,7 +240,7 @@ export default function StockManagerDashboard() {
       queryClient.invalidateQueries({ queryKey: ['stock-dashboard'] });
       queryClient.invalidateQueries({ queryKey: ['stock-board-reports'] });
     },
-    onError: (error: any) => toast.error(error.response?.data?.message || 'Impossible de publier ce rapport stock'),
+    onError: (error: any) => toast.error(getApiErrorMessage(error, 'Impossible de publier ce rapport stock')),
   });
 
   const selectedStockProduct = products.find((entry) => entry.id === stockForm.productId);
@@ -279,14 +293,37 @@ export default function StockManagerDashboard() {
     }));
   };
 
-  const buildPreparedLines = (lines: DraftLine[]) =>
-    lines
-      .filter((line) => line.productId && Number(line.quantity || 0) > 0)
-      .map((line) => ({
-        productId: line.productId,
-        ...(line.productVariantId ? { productVariantId: line.productVariantId } : {}),
-        quantity: Number(line.quantity || 0),
-      }));
+  const prepareReportLines = (lines: DraftLine[], sectionLabel: string) => {
+    const activeLines = lines.filter(
+      (line) => line.productId || line.productVariantId || line.quantity.trim()
+    );
+
+    for (let index = 0; index < activeLines.length; index += 1) {
+      const line = activeLines[index];
+      const quantity = Number(line.quantity);
+
+      if (!line.productId) {
+        toast.error(`${sectionLabel}, ligne ${index + 1}: choisis un produit.`);
+        return null;
+      }
+
+      if (!Number.isFinite(quantity) || !Number.isInteger(quantity) || quantity <= 0) {
+        toast.error(`${sectionLabel}, ligne ${index + 1}: la quantité doit être un nombre entier supérieur à 0.`);
+        return null;
+      }
+
+      if (quantity > 1000000) {
+        toast.error(`${sectionLabel}, ligne ${index + 1}: la quantité dépasse la limite autorisée.`);
+        return null;
+      }
+    }
+
+    return activeLines.map((line) => ({
+      productId: line.productId,
+      ...(line.productVariantId ? { productVariantId: line.productVariantId } : {}),
+      quantity: Number(line.quantity),
+    }));
+  };
 
   const handleStockUpdate = () => {
     if (!stockForm.productId) {
@@ -472,12 +509,44 @@ export default function StockManagerDashboard() {
   };
 
   const handleCreateReport = () => {
-    const stockOutputItems = buildPreparedLines(reportForm.stockOutputItems);
-    const productionInputItems = buildPreparedLines(reportForm.productionInputItems);
-    const productionOrderOutputItems = buildPreparedLines(reportForm.productionOrderOutputItems);
-
     if (reportForm.title.trim().length < 3) {
       toast.error('Donne un titre clair au rapport stock.');
+      return;
+    }
+
+    if (reportForm.title.trim().length > 120) {
+      toast.error('Le titre du rapport ne peut pas dépasser 120 caractères.');
+      return;
+    }
+
+    if (!reportForm.reportDate || Number.isNaN(new Date(`${reportForm.reportDate}T12:00:00`).getTime())) {
+      toast.error('Choisis une date valide pour le rapport.');
+      return;
+    }
+
+    if (reportForm.summary.trim().length > 1500) {
+      toast.error('Le résumé ne peut pas dépasser 1 500 caractères.');
+      return;
+    }
+
+    const stockOutputItems = prepareReportLines(reportForm.stockOutputItems, 'Production / Sortie de stock');
+    const productionInputItems = prepareReportLines(reportForm.productionInputItems, 'Production / Rentrée de stock');
+    const productionOrderOutputItems = prepareReportLines(
+      reportForm.productionOrderOutputItems,
+      'Commande / Sortie de stock production'
+    );
+
+    if (!stockOutputItems || !productionInputItems || !productionOrderOutputItems) {
+      return;
+    }
+
+    if (
+      reportForm.buyerShipmentIds.length === 0 &&
+      stockOutputItems.length === 0 &&
+      productionInputItems.length === 0 &&
+      productionOrderOutputItems.length === 0
+    ) {
+      toast.error('Ajoute au moins une réception ou un mouvement de stock avant de publier.');
       return;
     }
 
