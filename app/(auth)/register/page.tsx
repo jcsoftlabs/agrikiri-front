@@ -273,7 +273,7 @@ export default function RegisterPage() {
               { icon: '🌾', title: 'Produits 100% haïtiens', desc: 'Riz local et produits locaux de qualité supérieure' },
               { icon: '💰', title: 'Gagnez des commissions', desc: '1 PSK = 15 HTG, plus 20% niveau 1 et 10% niveau 2' },
               { icon: '🚀', title: 'Progressez rapidement', desc: '8 niveaux inspirés des héros haïtiens' },
-              { icon: '🏆', title: 'Aucun frais d\'entrée', desc: 'Commencez par un achat de produits (9,000 HTG)' },
+              { icon: '🏆', title: 'Aucun frais d\'entrée', desc: 'Tout client peut demander à devenir AYIZAN' },
             ].map((item) => (
               <div key={item.title} className="flex gap-4 p-4 bg-white/10 rounded-2xl">
                 <span className="text-3xl flex-shrink-0">{item.icon}</span>

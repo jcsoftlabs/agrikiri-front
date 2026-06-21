@@ -231,11 +231,11 @@ export default function DashboardPage() {
                 <div className="grid sm:grid-cols-3 gap-3 mb-6">
                   <div className="rounded-2xl bg-white border border-gray-100 p-4">
                     <div className="text-sm font-semibold text-agri-dark">Étape 1</div>
-                    <div className="text-sm text-gray-500 mt-1">Acheter au moins 9,000 HTG de produits payés</div>
+                    <div className="text-sm text-gray-500 mt-1">Créer et connecter votre compte client</div>
                   </div>
                   <div className="rounded-2xl bg-white border border-gray-100 p-4">
                     <div className="text-sm font-semibold text-agri-dark">Étape 2</div>
-                    <div className="text-sm text-gray-500 mt-1">Activer votre compte AYIZAN ici</div>
+                    <div className="text-sm text-gray-500 mt-1">Demander votre activation AYIZAN ici</div>
                   </div>
                   <div className="rounded-2xl bg-white border border-gray-100 p-4">
                     <div className="text-sm font-semibold text-agri-dark">Étape 3</div>
