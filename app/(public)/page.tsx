@@ -570,7 +570,7 @@ export default async function HomePage() {
                 La boutique reste prioritaire. Le réseau AYIZAN vient en complément pour les clients qui veulent ensuite vendre et parrainer autour de produits réels.
               </p>
               <div className="mt-4 flex flex-wrap gap-2">
-                {['Éligible dès 9 000 HTG d’achats payés', 'Aucune obligation', 'Dashboard et commissions ensuite'].map((item) => (
+                {['Activation ouverte aux clients', 'Aucune obligation', 'Dashboard et commissions ensuite'].map((item) => (
                   <span
                     key={item}
                     className="rounded-full px-3 py-1.5 text-xs font-semibold"
