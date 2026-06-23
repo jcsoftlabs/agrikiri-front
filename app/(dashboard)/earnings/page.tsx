@@ -6,7 +6,6 @@ import { useRouter } from 'next/navigation';
 import LevelBadge from '@/components/mlm/LevelBadge';
 import QuotaProgress from '@/components/mlm/QuotaProgress';
 import DashboardShell from '@/components/dashboard/DashboardShell';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import { getMyMLMStats, getMyCommissions } from '@/lib/services/mlm';
 import { useAuthStore } from '@/store/authStore';
@@ -46,12 +45,23 @@ export default function EarningsPage() {
   const { data: statsData } = useQuery({ queryKey: ['mlm-stats'], queryFn: getMyMLMStats, enabled: isAyizan });
   const { data: commissionsData, isLoading } = useQuery({ queryKey: ['mlm-commissions'], queryFn: getMyCommissions, enabled: isAyizan });
 
-  const stats = statsData || { monthlyCommissions: 0, personalVP: 0 };
+  const stats = statsData || {
+    monthlyCommissions: 0,
+    monthlyDirectCommissions: 0,
+    monthlyNetworkCommissions: 0,
+    monthlyBonus: 0,
+    personalVP: 0,
+    quotaVP: 546,
+    currentLevel: undefined,
+  };
   const commissions = commissionsData || [];
 
   const totalEarnings = commissions.reduce((sum, c) => sum + (c.status === 'PAID' || c.status === 'VALIDATED' ? Number(c.amount) : 0), 0);
   const pendingEarnings = commissions.reduce((sum, c) => sum + (c.status === 'PENDING' ? Number(c.amount) : 0), 0);
+  const validatedEarnings = commissions.reduce((sum, c) => sum + (c.status === 'VALIDATED' ? Number(c.amount) : 0), 0);
+  const paidEarnings = commissions.reduce((sum, c) => sum + (c.status === 'PAID' ? Number(c.amount) : 0), 0);
   const thisMonthEarnings = stats.monthlyCommissions || 0;
+  const potentialMonthlyCommission = Number(stats.currentLevel?.monthlyCommission || 0);
 
   if (user && user.role !== 'AYIZAN') {
     return null;
@@ -82,7 +92,7 @@ export default function EarningsPage() {
           {[
             { label: 'Ce mois', value: `${Number(thisMonthEarnings).toLocaleString()} HTG` },
             { label: 'En attente', value: `${Number(pendingEarnings).toLocaleString()} HTG` },
-            { label: 'Déjà payé', value: `${Number(totalEarnings).toLocaleString()} HTG` },
+            { label: 'Déjà payé', value: `${Number(paidEarnings).toLocaleString()} HTG` },
           ].map((item) => (
             <div key={item.label} className="bg-white/10 px-5 py-4 backdrop-blur-sm">
               <div className="text-xl font-bold text-white">{item.value}</div>
@@ -95,29 +105,44 @@ export default function EarningsPage() {
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
           <div className="lg:col-span-2 card overflow-hidden p-0">
             <div className="border-b border-gray-100 px-6 py-4">
-              <h2 className="font-display text-2xl text-agri-dark">Historique mensuel</h2>
-              <p className="mt-1 text-sm text-gray-500">Suivez l’évolution de vos commissions mois après mois.</p>
+              <h2 className="font-display text-2xl text-agri-dark">Portefeuille commissions</h2>
+              <p className="mt-1 text-sm text-gray-500">Vue simple des gains avant le futur module wallet/retrait.</p>
             </div>
-            <div className="p-4 sm:p-6">
-            <ResponsiveContainer width="100%" height={240}>
-              <BarChart data={[]}>
-                <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                <XAxis dataKey="month" tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                <YAxis tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                <Tooltip
-                  formatter={(value: number) => [`${value.toLocaleString()} HTG`, 'Commissions']}
-                  contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'DM Sans' }}
-                />
-                <Bar dataKey="total" fill="#2D7A2D" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-6 xl:grid-cols-4">
+              {[
+                { label: 'Disponible bientôt', value: validatedEarnings, tone: 'bg-blue-50 text-blue-700 border-blue-100', help: 'Commissions validées, pas encore payées.' },
+                { label: 'En attente', value: pendingEarnings, tone: 'bg-amber-50 text-amber-700 border-amber-100', help: 'À valider par le système/admin.' },
+                { label: 'Payé', value: paidEarnings, tone: 'bg-green-50 text-green-700 border-green-100', help: 'Déjà marqué comme payé.' },
+                { label: 'Total reconnu', value: totalEarnings, tone: 'bg-agri-green-50 text-agri-green-800 border-agri-green-100', help: 'Validé + payé.' },
+              ].map((item) => (
+                <div key={item.label} className={`rounded-[24px] border p-4 ${item.tone}`}>
+                  <div className="text-xs font-semibold uppercase tracking-[0.18em] opacity-70">{item.label}</div>
+                  <div className="mt-3 text-2xl font-bold">{Number(item.value).toLocaleString()} HTG</div>
+                  <p className="mt-2 text-xs leading-relaxed opacity-75">{item.help}</p>
+                </div>
+              ))}
+            </div>
+
+            <div className="border-t border-gray-100 p-4 sm:p-6">
+              <div className="grid gap-3 sm:grid-cols-3">
+                {[
+                  { label: 'Direct ce mois', value: stats.monthlyDirectCommissions || 0 },
+                  { label: 'Réseau ce mois', value: stats.monthlyNetworkCommissions || 0 },
+                  { label: 'Bonus ce mois', value: stats.monthlyBonus || 0 },
+                ].map((item) => (
+                  <div key={item.label} className="rounded-2xl bg-gray-50 px-4 py-3">
+                    <div className="text-sm font-semibold text-agri-dark">{Number(item.value).toLocaleString()} HTG</div>
+                    <div className="text-xs text-gray-500">{item.label}</div>
+                  </div>
+                ))}
+              </div>
             </div>
           </div>
 
           <div className="card p-6 space-y-6">
             <div className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm">
               <h2 className="font-semibold text-agri-dark mb-3">Quota Mensuel</h2>
-              <QuotaProgress currentVP={stats.personalVP || 0} />
+              <QuotaProgress currentVP={stats.personalVP || 0} targetVP={stats.quotaVP || 546} />
             </div>
             <div className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm">
               <div className="text-sm text-gray-500 mb-2">Votre niveau actuel</div>
@@ -125,7 +150,9 @@ export default function EarningsPage() {
             </div>
             <div className="rounded-[24px] bg-agri-green-50 p-4">
               <div className="text-sm text-agri-green-700 font-medium mb-1">Commission mensuelle potentielle</div>
-              <div className="text-2xl font-bold text-agri-green-800">100,000 HTG</div>
+              <div className="text-2xl font-bold text-agri-green-800">
+                {potentialMonthlyCommission > 0 ? `${potentialMonthlyCommission.toLocaleString()} HTG` : 'Selon le grade'}
+              </div>
               <div className="text-xs text-agri-green-600 mt-1">Si quota 546 VP atteint</div>
             </div>
           </div>
@@ -137,8 +164,12 @@ export default function EarningsPage() {
               <h2 className="font-display text-2xl text-agri-dark">Détail des Commissions</h2>
               <p className="mt-1 text-sm text-gray-500">Retrouvez chaque gain, sa provenance et son état de paiement.</p>
             </div>
-            <button className="text-sm text-agri-green-600 font-medium border border-agri-green-200 px-4 py-2 rounded-xl hover:bg-agri-green-50 transition-colors">
-              📥 Exporter CSV
+            <button
+              disabled
+              title="Export personnel à brancher avec le futur wallet."
+              className="cursor-not-allowed rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-400"
+            >
+              Export bientôt
             </button>
           </div>
 

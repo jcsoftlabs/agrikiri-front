@@ -2,10 +2,29 @@ import api from '../api';
 
 export interface MLMStats {
   monthlyCommissions: number;
+  monthlyDirectCommissions: number;
+  monthlyNetworkCommissions: number;
+  monthlyBonus: number;
   personalVP: number;
   networkVP: number;
   newRecruits: number;
   quotaReached: boolean;
+  quotaVP: number;
+  quotaProgress: number;
+  downlineCount: number;
+  currentLevel?: {
+    name: string;
+    monthlyCommission?: number | null;
+    requiredDownline?: number;
+    description?: string;
+  };
+  nextLevel?: {
+    key: string;
+    name: string;
+    monthlyCommission?: number | null;
+    requiredDownline?: number;
+    description?: string;
+  } | null;
 }
 
 export interface Commission {
@@ -61,10 +80,18 @@ export const getMyMLMStats = async (): Promise<MLMStats> => {
 
   return {
     monthlyCommissions: toNumber(monthlyPerformance?.totalCommissions),
+    monthlyDirectCommissions: toNumber(monthlyPerformance?.directCommissions),
+    monthlyNetworkCommissions: toNumber(monthlyPerformance?.networkCommissions),
+    monthlyBonus: toNumber(monthlyPerformance?.bonus),
     personalVP: toNumber(payload?.personalVP),
     networkVP: toNumber(monthlyPerformance?.networkVP),
     newRecruits: toNumber(monthlyPerformance?.downlineCount ?? payload?.downlineCount),
     quotaReached: Boolean(monthlyPerformance?.quotaReached),
+    quotaVP: toNumber(payload?.quotaVP) || 546,
+    quotaProgress: toNumber(payload?.quotaProgress),
+    downlineCount: toNumber(payload?.downlineCount),
+    currentLevel: payload?.currentLevel,
+    nextLevel: payload?.nextLevel || null,
   };
 };
 
@@ -105,12 +132,31 @@ export const getMyNetworkList = async (): Promise<NetworkMember[]> => {
 export const getMyNetworkTree = async (): Promise<NetworkTree> => {
   const { data } = await api.get('/mlm/my-network');
   const tree = data.data?.tree;
+  const stats = data.data?.stats || {};
 
   if (!tree) {
     throw new Error('Arbre réseau introuvable.');
   }
 
-  return tree;
+  const normalizeTree = (node: any): NetworkTree => ({
+    id: node.id,
+    name: node.name || `${node.firstName || ''} ${node.lastName || ''}`.trim() || 'Membre',
+    level: node.level || node.mlmLevel || 'CUSTOMER',
+    vp: toNumber(node.vp ?? node.personalVolume),
+    attributes: {
+      isActive: Boolean(node.isActive),
+    },
+    children: (node.children || []).map(normalizeTree),
+  });
+
+  return {
+    ...normalizeTree(tree),
+    attributes: {
+      totalMembers: toNumber(stats.totalMembers),
+      directMembers: toNumber(stats.directMembers),
+      activeMembers: toNumber(stats.activeThisMonth),
+    },
+  };
 };
 
 // Leaderboard

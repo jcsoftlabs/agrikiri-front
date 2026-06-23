@@ -9,9 +9,20 @@ import { useQuery } from '@tanstack/react-query';
 import { getMyNetworkTree } from '@/lib/services/mlm';
 import { useAuthStore } from '@/store/authStore';
 
-const LEVEL_GUIDE = Object.entries(MLM_LEVEL_CONFIG).map(([key, config]) => ({
+const MLM_LEVEL_ORDER = [
+  'AYIZAN',
+  'GUACANAGARIC',
+  'MACKANDAL',
+  'BOUKMAN',
+  'SANITE_BELAIRE',
+  'TOUSSAINT_LOUVERTURE',
+  'CATHERINE_FLON',
+  'JEAN_JACQUES_DESSALINES',
+];
+
+const LEVEL_GUIDE = MLM_LEVEL_ORDER.map((key) => ({
   key,
-  ...config,
+  ...MLM_LEVEL_CONFIG[key],
 }));
 
 interface NetworkNodeProps {
@@ -61,6 +72,15 @@ function NetworkNode({ node, depth = 0 }: NetworkNodeProps) {
   );
 }
 
+function flattenNetwork(node: any, depth = 0): any[] {
+  if (!node) return [];
+
+  return [
+    { ...node, depth },
+    ...(node.children || []).flatMap((child: any) => flattenNetwork(child, depth + 1)),
+  ];
+}
+
 export default function NetworkPage() {
   const router = useRouter();
   const user = useAuthStore((state) => state.user);
@@ -80,6 +100,8 @@ export default function NetworkPage() {
 
   const totalMembers = networkData?.attributes?.totalMembers || 0;
   const activeMembers = networkData?.attributes?.activeMembers || 0;
+  const directMembers = networkData?.attributes?.directMembers || 0;
+  const mobileMembers = networkData ? flattenNetwork(networkData).filter((member) => member.depth > 0) : [];
 
   if (user && user.role !== 'AYIZAN') {
     return null;
@@ -108,8 +130,8 @@ export default function NetworkPage() {
         <div className="grid gap-4 p-4 sm:grid-cols-3 sm:p-6">
           {[
             { label: 'Total membres', value: totalMembers, accent: 'text-agri-dark' },
+            { label: 'Directs', value: directMembers, accent: 'text-blue-700' },
             { label: 'Actifs ce mois', value: activeMembers, accent: 'text-agri-green-700' },
-            { label: 'Niveaux de profondeur', value: 3, accent: 'text-agri-gold-600' },
           ].map((stat) => (
             <div key={stat.label} className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
               <div className={`text-3xl font-bold ${stat.accent}`}>{stat.value}</div>
@@ -126,6 +148,48 @@ export default function NetworkPage() {
             Faites glisser horizontalement sur mobile pour parcourir tous vos niveaux.
           </p>
         </div>
+
+        <div className="border-b border-gray-100 p-4 lg:hidden">
+          <div className="mb-3 flex items-center justify-between gap-3">
+            <div>
+              <div className="text-xs font-semibold uppercase tracking-[0.22em] text-agri-green-700/70">Vue mobile</div>
+              <h3 className="mt-1 font-semibold text-agri-dark">Liste de votre lignée</h3>
+            </div>
+            <span className="rounded-full bg-agri-green-50 px-3 py-1 text-xs font-semibold text-agri-green-700">
+              {mobileMembers.length} membre(s)
+            </span>
+          </div>
+
+          {isLoading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, index) => (
+                <div key={index} className="shimmer h-20 rounded-2xl" />
+              ))}
+            </div>
+          ) : mobileMembers.length > 0 ? (
+            <div className="space-y-3">
+              {mobileMembers.map((member) => (
+                <div key={member.id} className="rounded-[22px] border border-gray-100 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-400">
+                        Niveau {member.depth}
+                      </div>
+                      <div className="mt-1 truncate font-semibold text-agri-dark">{member.name}</div>
+                      <div className="mt-1 text-sm text-gray-500">{Number(member.vp || 0).toLocaleString()} VP personnel</div>
+                    </div>
+                    <LevelBadge level={member.level} size="sm" />
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[22px] border border-dashed border-gray-200 bg-gray-50 px-4 py-6 text-center text-sm text-gray-500">
+              Aucun membre dans votre réseau pour le moment. Partagez votre code pour commencer.
+            </div>
+          )}
+        </div>
+
         <div className="min-h-[320px] overflow-x-auto px-5 py-6 sm:px-8">
           <div className="flex justify-center min-w-max">
             {isLoading ? (

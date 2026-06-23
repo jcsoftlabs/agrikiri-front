@@ -5,13 +5,14 @@ import { useState } from 'react';
 import LevelBadge from '@/components/mlm/LevelBadge';
 import QuotaProgress from '@/components/mlm/QuotaProgress';
 import DashboardShell from '@/components/dashboard/DashboardShell';
-import { LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
 import { getMyMLMStats, getMyNetworkList } from '@/lib/services/mlm';
 import { useAuthStore } from '@/store/authStore';
 import Button from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 import api from '@/lib/api';
+
+const formatMoney = (value: number) => `${Number(value || 0).toLocaleString('fr-FR')} HTG`;
 
 export default function DashboardPage() {
   const { user, checkAuth } = useAuthStore();
@@ -33,9 +34,56 @@ export default function DashboardPage() {
 
   const stats = statsData || { 
     monthlyCommissions: 0, 
+    monthlyDirectCommissions: 0,
+    monthlyNetworkCommissions: 0,
+    monthlyBonus: 0,
     personalVP: 0, 
     networkVP: 0, 
-    newRecruits: 0 
+    newRecruits: 0,
+    quotaReached: false,
+    quotaVP: 546,
+    quotaProgress: 0,
+    downlineCount: 0,
+    currentLevel: undefined,
+    nextLevel: null,
+  };
+
+  const referralUrl =
+    typeof window !== 'undefined' && user?.referralCode
+      ? `${window.location.origin}/register?ref=${encodeURIComponent(user.referralCode)}`
+      : '';
+
+  const copyReferralCode = async () => {
+    if (!user?.referralCode) return;
+
+    try {
+      await navigator.clipboard.writeText(user.referralCode);
+      toast.success('Code de parrainage copié.');
+    } catch {
+      toast.error('Impossible de copier le code automatiquement.');
+    }
+  };
+
+  const shareReferralCode = async () => {
+    if (!user?.referralCode) return;
+
+    const shareText = `Rejoins AGRIKIRI avec mon code de référence ${user.referralCode}`;
+
+    if (navigator.share && referralUrl) {
+      try {
+        await navigator.share({
+          title: 'Rejoindre AGRIKIRI',
+          text: shareText,
+          url: referralUrl,
+        });
+        return;
+      } catch {
+        // Fall back to WhatsApp if native sharing is cancelled or unavailable.
+      }
+    }
+
+    const message = encodeURIComponent(referralUrl ? `${shareText}\n${referralUrl}` : shareText);
+    window.open(`https://wa.me/?text=${message}`, '_blank', 'noopener,noreferrer');
   };
 
   const handleBecomeAyizan = async () => {
@@ -62,7 +110,7 @@ export default function DashboardPage() {
           <>
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
               {[
-                { label: 'Commissions ce mois', value: `${Number(stats.monthlyCommissions || 0).toLocaleString()} HTG`, icon: '💰', color: 'text-agri-green-600', change: 'M' },
+                { label: 'Commissions ce mois', value: formatMoney(stats.monthlyCommissions || 0), icon: '💰', color: 'text-agri-green-600', change: 'M' },
                 { label: 'Volume Personnel (VP)', value: Number(stats.personalVP || 0).toString(), icon: '📈', color: 'text-blue-600', change: 'M' },
                 { label: 'Volume Réseau (VP)', value: Number(stats.networkVP || 0).toLocaleString(), icon: '🌐', color: 'text-purple-600', change: 'M' },
                 { label: 'Nouvelles Recrues', value: Number(stats.newRecruits || 0).toString(), icon: '👥', color: 'text-amber-600', change: 'M' },
@@ -81,20 +129,74 @@ export default function DashboardPage() {
             </div>
 
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-8">
-              <div className="lg:col-span-2 card p-6">
-                <h2 className="font-semibold text-agri-dark mb-4">Évolution des commissions</h2>
-                <ResponsiveContainer width="100%" height={220}>
-                  <LineChart data={[]}>
-                    <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                    <XAxis dataKey="week" tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                    <YAxis tick={{ fontSize: 12, fill: '#9ca3af' }} />
-                    <Tooltip
-                      formatter={(value: number) => [`${value.toLocaleString()} HTG`, 'Commissions']}
-                      contentStyle={{ borderRadius: '12px', border: 'none', boxShadow: '0 4px 20px rgba(0,0,0,0.1)', fontFamily: 'DM Sans' }}
-                    />
-                    <Line type="monotone" dataKey="commissions" stroke="#2D7A2D" strokeWidth={3} dot={{ fill: '#2D7A2D', r: 5 }} />
-                  </LineChart>
-                </ResponsiveContainer>
+              <div className="lg:col-span-2 card overflow-hidden p-0">
+                <div className="bg-[radial-gradient(circle_at_top_left,_rgba(212,175,55,0.18),_transparent_35%),linear-gradient(135deg,_#183222_0%,_#2d6b35_100%)] p-5 text-white sm:p-6">
+                  <div className="text-xs font-semibold uppercase tracking-[0.28em] text-white/60">Centre de parrainage</div>
+                  <h2 className="mt-3 font-display text-3xl leading-tight">Partagez votre code, suivez vos gains.</h2>
+                  <p className="mt-2 max-w-xl text-sm leading-relaxed text-white/72">
+                    Un client inscrit avec votre code restera lié à votre réseau et ses achats payés pourront générer vos commissions.
+                  </p>
+                </div>
+
+                <div className="grid gap-4 p-5 sm:grid-cols-[1.2fr_0.8fr] sm:p-6">
+                  <div className="rounded-[26px] border border-agri-green-100 bg-agri-green-50 p-4">
+                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-agri-green-700/70">Votre code</div>
+                    <div className="mt-3 rounded-2xl border border-agri-green-200 bg-white px-4 py-3 font-mono text-2xl font-bold tracking-[0.18em] text-agri-green-800">
+                      {user?.referralCode || 'AGK-------'}
+                    </div>
+                    <div className="mt-3 grid grid-cols-2 gap-2">
+                      <button
+                        onClick={copyReferralCode}
+                        className="rounded-2xl border border-agri-green-200 bg-white px-3 py-3 text-sm font-semibold text-agri-green-700 transition-colors hover:bg-agri-green-50"
+                      >
+                        Copier
+                      </button>
+                      <button
+                        onClick={shareReferralCode}
+                        className="rounded-2xl bg-agri-green-700 px-3 py-3 text-sm font-semibold text-white shadow-[0_12px_28px_rgba(45,122,45,0.22)] transition-colors hover:bg-agri-green-800"
+                      >
+                        Partager
+                      </button>
+                    </div>
+                    {referralUrl && (
+                      <div className="mt-3 truncate rounded-xl bg-white/70 px-3 py-2 text-xs text-gray-500">
+                        {referralUrl}
+                      </div>
+                    )}
+                  </div>
+
+                  <div className="rounded-[26px] border border-gray-100 bg-white p-4 shadow-sm">
+                    <div className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-400">Prochain grade</div>
+                    <div className="mt-3">
+                      {stats.nextLevel ? (
+                        <>
+                          <LevelBadge level={stats.nextLevel.key} size="lg" showDescription />
+                          <div className="mt-4 text-sm text-gray-500">
+                            Réseau actuel: <strong className="text-agri-dark">{stats.downlineCount}</strong>
+                            {typeof stats.nextLevel.requiredDownline === 'number' && (
+                              <> / {stats.nextLevel.requiredDownline} membre(s)</>
+                            )}
+                          </div>
+                        </>
+                      ) : (
+                        <div className="text-sm font-semibold text-agri-green-700">Vous êtes au niveau le plus élevé disponible.</div>
+                      )}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid gap-px bg-gray-100 sm:grid-cols-3">
+                  {[
+                    { label: 'Direct', value: formatMoney(stats.monthlyDirectCommissions || 0) },
+                    { label: 'Réseau', value: formatMoney(stats.monthlyNetworkCommissions || 0) },
+                    { label: 'Bonus', value: formatMoney(stats.monthlyBonus || 0) },
+                  ].map((item) => (
+                    <div key={item.label} className="bg-white px-5 py-4">
+                      <div className="text-lg font-bold text-agri-dark">{item.value}</div>
+                      <div className="mt-1 text-sm text-gray-500">{item.label}</div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
               <div className="card p-6 flex flex-col gap-6">
@@ -104,7 +206,7 @@ export default function DashboardPage() {
                 </div>
                 <div>
                   <h3 className="font-semibold text-agri-dark mb-3">Quota Mensuel</h3>
-                  <QuotaProgress currentVP={stats.personalVP || 0} />
+                  <QuotaProgress currentVP={stats.personalVP || 0} targetVP={stats.quotaVP || 546} />
                 </div>
                 {user?.referralCode && (
                   <div className="bg-agri-green-50 rounded-2xl p-4 text-center">
