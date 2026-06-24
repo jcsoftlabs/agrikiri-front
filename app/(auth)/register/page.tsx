@@ -11,13 +11,18 @@ import { useAuthStore } from '@/store/authStore';
 export default function RegisterPage() {
   const router = useRouter();
   const register = useAuthStore((state) => state.register);
+  const initialReferralCode = typeof window !== 'undefined'
+    ? new URLSearchParams(window.location.search).get('ref')
+      || new URLSearchParams(window.location.search).get('referralCode')
+      || ''
+    : '';
   const [form, setForm] = useState({
     firstName: '',
     lastName: '',
     email: '',
     phone: '',
     password: '',
-    referralCode: '',
+    referralCode: initialReferralCode,
   });
   const [confirmPassword, setConfirmPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -242,6 +247,11 @@ export default function RegisterPage() {
                     Code de parrainage <span className="text-gray-400 font-normal">(optionnel)</span>
                   </label>
                   <input id="reg-referral" name="referralCode" type="text" value={form.referralCode} onChange={handleChange} className="input" placeholder="AGK-XXXXXX" />
+                  {initialReferralCode && (
+                    <p className="mt-2 rounded-2xl border border-agri-green-100 bg-agri-green-50 px-3 py-2 text-xs font-medium text-agri-green-700">
+                      Code détecté depuis votre lien d’invitation.
+                    </p>
+                  )}
                 </div>
                 <div className="flex gap-3">
                   <Button type="button" variant="secondary" size="lg" className="flex-1" onClick={() => setStep(1)}>← Retour</Button>
