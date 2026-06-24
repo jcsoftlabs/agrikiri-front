@@ -30,10 +30,51 @@ export interface MLMStats {
 export interface Commission {
   id: string;
   sourceUserId: string;
+  sourceEmail?: string | null;
   type: string;
   amount: number;
   status: string;
   createdAt: string;
+  orderNumber?: string | null;
+  orderTotal?: number | null;
+  orderVP?: number | null;
+  orderPaymentStatus?: string | null;
+}
+
+export interface CommissionHistoryPoint {
+  month: number;
+  year: number;
+  label: string;
+  total: number;
+  pending: number;
+  validated: number;
+  paid: number;
+  personalVP: number;
+  networkVP: number;
+  quotaReached: boolean;
+}
+
+export interface MlmActivity {
+  recentRecruits: Array<{
+    id: string;
+    name: string;
+    role: string;
+    mlmLevel: string;
+    personalVolume: number;
+    createdAt: string;
+  }>;
+  recentOrders: Array<{
+    id: string;
+    orderNumber: string;
+    customerName: string;
+    customerEmail: string;
+    totalAmount: number;
+    totalVP: number;
+    status: string;
+    paymentStatus: string;
+    createdAt: string;
+  }>;
+  recentCommissions: Commission[];
 }
 
 export interface NetworkMember {
@@ -105,11 +146,79 @@ export const getMyCommissions = async (): Promise<Commission[]> => {
     sourceUserId: commission.sourceUser
       ? `${commission.sourceUser.firstName} ${commission.sourceUser.lastName}`
       : commission.sourceUserId || 'Système',
+    sourceEmail: commission.sourceUser?.email || null,
     type: commission.type,
     amount: toNumber(commission.amount),
     status: commission.status,
     createdAt: commission.createdAt,
+    orderNumber: commission.order?.orderNumber || null,
+    orderTotal: commission.order ? toNumber(commission.order.totalAmount) : null,
+    orderVP: commission.order ? toNumber(commission.order.totalVP) : null,
+    orderPaymentStatus: commission.order?.paymentStatus || null,
   }));
+};
+
+export const getMyCommissionHistory = async (): Promise<CommissionHistoryPoint[]> => {
+  const { data } = await api.get('/commissions/history', { params: { months: 12 } });
+  const history = data.data || [];
+
+  return history.map((item: any) => ({
+    month: Number(item.month),
+    year: Number(item.year),
+    label: item.label,
+    total: toNumber(item.total),
+    pending: toNumber(item.pending),
+    validated: toNumber(item.validated),
+    paid: toNumber(item.paid),
+    personalVP: toNumber(item.personalVP),
+    networkVP: toNumber(item.networkVP),
+    quotaReached: Boolean(item.quotaReached),
+  }));
+};
+
+export const getMyMlmActivity = async (): Promise<MlmActivity> => {
+  const { data } = await api.get('/commissions/activity');
+  const payload = data.data || {};
+
+  return {
+    recentRecruits: (payload.recentRecruits || []).map((item: any) => ({
+      id: item.id,
+      name: item.name,
+      role: item.role,
+      mlmLevel: item.mlmLevel,
+      personalVolume: toNumber(item.personalVolume),
+      createdAt: item.createdAt,
+    })),
+    recentOrders: (payload.recentOrders || []).map((item: any) => ({
+      id: item.id,
+      orderNumber: item.orderNumber,
+      customerName: item.customerName,
+      customerEmail: item.customerEmail,
+      totalAmount: toNumber(item.totalAmount),
+      totalVP: toNumber(item.totalVP),
+      status: item.status,
+      paymentStatus: item.paymentStatus,
+      createdAt: item.createdAt,
+    })),
+    recentCommissions: (payload.recentCommissions || []).map((commission: any) => ({
+      id: commission.id,
+      sourceUserId: commission.sourceName || 'Système',
+      sourceEmail: commission.sourceEmail || null,
+      type: commission.type,
+      amount: toNumber(commission.amount),
+      status: commission.status,
+      createdAt: commission.createdAt,
+      orderNumber: commission.orderNumber || null,
+      orderTotal: commission.orderTotal === null ? null : toNumber(commission.orderTotal),
+      orderVP: commission.orderVP === null ? null : toNumber(commission.orderVP),
+      orderPaymentStatus: commission.orderPaymentStatus || null,
+    })),
+  };
+};
+
+export const downloadMyCommissionsCsv = async (): Promise<Blob> => {
+  const response = await api.get('/commissions/export/my', { responseType: 'blob' });
+  return response.data;
 };
 
 // Network list

@@ -6,7 +6,7 @@ import LevelBadge from '@/components/mlm/LevelBadge';
 import QuotaProgress from '@/components/mlm/QuotaProgress';
 import DashboardShell from '@/components/dashboard/DashboardShell';
 import { useQuery } from '@tanstack/react-query';
-import { getMyMLMStats, getMyNetworkList } from '@/lib/services/mlm';
+import { getMyMLMStats, getMyNetworkList, getMyMlmActivity } from '@/lib/services/mlm';
 import { useAuthStore } from '@/store/authStore';
 import Button from '@/components/ui/Button';
 import toast from 'react-hot-toast';
@@ -32,6 +32,12 @@ export default function DashboardPage() {
     enabled: isAyizan,
   });
 
+  const { data: activityData } = useQuery({
+    queryKey: ['mlm-activity'],
+    queryFn: getMyMlmActivity,
+    enabled: isAyizan,
+  });
+
   const stats = statsData || { 
     monthlyCommissions: 0, 
     monthlyDirectCommissions: 0,
@@ -52,6 +58,9 @@ export default function DashboardPage() {
     typeof window !== 'undefined' && user?.referralCode
       ? `${window.location.origin}/register?ref=${encodeURIComponent(user.referralCode)}`
       : '';
+  const qrCodeUrl = referralUrl
+    ? `https://api.qrserver.com/v1/create-qr-code/?size=220x220&data=${encodeURIComponent(referralUrl)}`
+    : '';
 
   const copyReferralCode = async () => {
     if (!user?.referralCode) return;
@@ -185,6 +194,23 @@ export default function DashboardPage() {
                   </div>
                 </div>
 
+                {qrCodeUrl && (
+                  <div className="border-t border-gray-100 px-5 py-5 sm:px-6">
+                    <div className="grid gap-4 sm:grid-cols-[auto_1fr] sm:items-center">
+                      <div className="mx-auto rounded-[24px] border border-gray-100 bg-white p-3 shadow-sm sm:mx-0">
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={qrCodeUrl} alt="QR code de parrainage" className="h-32 w-32 rounded-2xl" />
+                      </div>
+                      <div>
+                        <div className="text-sm font-semibold text-agri-dark">QR code de parrainage</div>
+                        <p className="mt-1 text-sm leading-relaxed text-gray-500">
+                          Un prospect peut scanner ce code pour arriver directement sur l’inscription avec votre référence.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
                 <div className="grid gap-px bg-gray-100 sm:grid-cols-3">
                   {[
                     { label: 'Direct', value: formatMoney(stats.monthlyDirectCommissions || 0) },
@@ -216,6 +242,65 @@ export default function DashboardPage() {
                     </div>
                   </div>
                 )}
+              </div>
+            </div>
+
+            <div className="grid grid-cols-1 gap-6 mb-8 lg:grid-cols-2">
+              <div className="card p-6">
+                <div className="mb-5">
+                  <div className="text-xs font-semibold uppercase tracking-[0.24em] text-agri-green-700/70">Notifications réseau</div>
+                  <h2 className="mt-2 font-display text-2xl text-agri-dark">Filleuls récents</h2>
+                </div>
+                <div className="space-y-3">
+                  {(activityData?.recentRecruits || []).length > 0 ? (
+                    activityData!.recentRecruits.slice(0, 5).map((recruit) => (
+                      <div key={recruit.id} className="rounded-[22px] border border-gray-100 bg-white p-4 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-agri-dark">{recruit.name}</div>
+                            <div className="mt-1 text-sm text-gray-500">
+                              Inscrit le {new Date(recruit.createdAt).toLocaleDateString('fr-HT')}
+                            </div>
+                          </div>
+                          <LevelBadge level={recruit.mlmLevel} size="sm" />
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-[22px] border border-dashed border-gray-200 bg-gray-50 p-5 text-center text-sm text-gray-500">
+                      Aucun nouveau filleul pour le moment.
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className="card p-6">
+                <div className="mb-5">
+                  <div className="text-xs font-semibold uppercase tracking-[0.24em] text-agri-green-700/70">Achats attribués</div>
+                  <h2 className="mt-2 font-display text-2xl text-agri-dark">Commandes récentes</h2>
+                </div>
+                <div className="space-y-3">
+                  {(activityData?.recentOrders || []).length > 0 ? (
+                    activityData!.recentOrders.slice(0, 5).map((order) => (
+                      <div key={order.id} className="rounded-[22px] border border-gray-100 bg-white p-4 shadow-sm">
+                        <div className="flex items-start justify-between gap-3">
+                          <div>
+                            <div className="font-semibold text-agri-dark">{order.customerName}</div>
+                            <div className="mt-1 text-xs text-gray-400">{order.orderNumber}</div>
+                          </div>
+                          <div className="text-right">
+                            <div className="font-bold text-agri-green-700">{formatMoney(order.totalAmount)}</div>
+                            <div className="mt-1 text-xs text-gray-500">{order.totalVP.toLocaleString()} PSK</div>
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div className="rounded-[22px] border border-dashed border-gray-200 bg-gray-50 p-5 text-center text-sm text-gray-500">
+                      Aucune commande attribuée pour le moment.
+                    </div>
+                  )}
+                </div>
               </div>
             </div>
 

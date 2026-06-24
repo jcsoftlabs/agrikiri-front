@@ -6,9 +6,11 @@ import { useRouter } from 'next/navigation';
 import LevelBadge from '@/components/mlm/LevelBadge';
 import QuotaProgress from '@/components/mlm/QuotaProgress';
 import DashboardShell from '@/components/dashboard/DashboardShell';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
 import { useQuery } from '@tanstack/react-query';
-import { getMyMLMStats, getMyCommissions } from '@/lib/services/mlm';
+import { downloadMyCommissionsCsv, getMyCommissionHistory, getMyCommissions, getMyMLMStats, getMyMlmActivity } from '@/lib/services/mlm';
 import { useAuthStore } from '@/store/authStore';
+import toast from 'react-hot-toast';
 
 
 
@@ -44,6 +46,8 @@ export default function EarningsPage() {
 
   const { data: statsData } = useQuery({ queryKey: ['mlm-stats'], queryFn: getMyMLMStats, enabled: isAyizan });
   const { data: commissionsData, isLoading } = useQuery({ queryKey: ['mlm-commissions'], queryFn: getMyCommissions, enabled: isAyizan });
+  const { data: historyData = [] } = useQuery({ queryKey: ['mlm-commission-history'], queryFn: getMyCommissionHistory, enabled: isAyizan });
+  const { data: activityData } = useQuery({ queryKey: ['mlm-activity'], queryFn: getMyMlmActivity, enabled: isAyizan });
 
   const stats = statsData || {
     monthlyCommissions: 0,
@@ -62,6 +66,23 @@ export default function EarningsPage() {
   const paidEarnings = commissions.reduce((sum, c) => sum + (c.status === 'PAID' ? Number(c.amount) : 0), 0);
   const thisMonthEarnings = stats.monthlyCommissions || 0;
   const potentialMonthlyCommission = Number(stats.currentLevel?.monthlyCommission || 0);
+
+  const handleExportCsv = async () => {
+    try {
+      const blob = await downloadMyCommissionsCsv();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = 'mes-commissions-mlm.csv';
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      URL.revokeObjectURL(url);
+      toast.success('Export CSV téléchargé.');
+    } catch {
+      toast.error('Impossible de télécharger l’export CSV.');
+    }
+  };
 
   if (user && user.role !== 'AYIZAN') {
     return null;
@@ -124,6 +145,31 @@ export default function EarningsPage() {
             </div>
 
             <div className="border-t border-gray-100 p-4 sm:p-6">
+              <div className="mb-3 flex items-center justify-between gap-3">
+                <div>
+                  <h3 className="font-semibold text-agri-dark">Historique réel mois par mois</h3>
+                  <p className="text-sm text-gray-500">Commissions créées sur les 12 derniers mois.</p>
+                </div>
+              </div>
+              <div className="h-64 w-full">
+                <ResponsiveContainer width="100%" height="100%">
+                  <BarChart data={historyData}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#eef1ea" />
+                    <XAxis dataKey="label" tick={{ fontSize: 12, fill: '#8a927f' }} />
+                    <YAxis tick={{ fontSize: 12, fill: '#8a927f' }} />
+                    <Tooltip
+                      formatter={(value: number, name: string) => [`${Number(value).toLocaleString('fr-FR')} HTG`, name === 'paid' ? 'Payé' : name === 'validated' ? 'Validé' : name === 'pending' ? 'En attente' : 'Total']}
+                      contentStyle={{ borderRadius: '16px', border: '1px solid #eef1ea', boxShadow: '0 18px 50px rgba(24,50,34,0.12)', fontFamily: 'DM Sans' }}
+                    />
+                    <Bar dataKey="pending" stackId="a" fill="#f0b429" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="validated" stackId="a" fill="#3b82f6" radius={[8, 8, 0, 0]} />
+                    <Bar dataKey="paid" stackId="a" fill="#2d7a2d" radius={[8, 8, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              </div>
+            </div>
+
+            <div className="border-t border-gray-100 p-4 sm:p-6">
               <div className="grid gap-3 sm:grid-cols-3">
                 {[
                   { label: 'Direct ce mois', value: stats.monthlyDirectCommissions || 0 },
@@ -165,11 +211,10 @@ export default function EarningsPage() {
               <p className="mt-1 text-sm text-gray-500">Retrouvez chaque gain, sa provenance et son état de paiement.</p>
             </div>
             <button
-              disabled
-              title="Export personnel à brancher avec le futur wallet."
-              className="cursor-not-allowed rounded-xl border border-gray-200 bg-gray-50 px-4 py-2 text-sm font-medium text-gray-400"
+              onClick={handleExportCsv}
+              className="rounded-xl border border-agri-green-200 bg-white px-4 py-2 text-sm font-medium text-agri-green-700 transition-colors hover:bg-agri-green-50"
             >
-              Export bientôt
+              Export CSV
             </button>
           </div>
 
@@ -211,6 +256,11 @@ export default function EarningsPage() {
                       </div>
                     </div>
                   </div>
+                  {commission.orderNumber && (
+                    <div className="rounded-2xl bg-agri-green-50 px-3 py-2 text-xs text-agri-green-800">
+                      Commande {commission.orderNumber} · {Number(commission.orderTotal || 0).toLocaleString('fr-FR')} HTG · {Number(commission.orderVP || 0).toLocaleString('fr-FR')} PSK
+                    </div>
+                  )}
                 </div>
               ))
             ) : (
@@ -246,6 +296,11 @@ export default function EarningsPage() {
                       </td>
                       <td className="font-bold text-agri-green-700">
                         +{Number(commission.amount).toLocaleString()} HTG
+                        {commission.orderNumber && (
+                          <div className="mt-1 text-xs font-normal text-gray-400">
+                            {commission.orderNumber} · {Number(commission.orderTotal || 0).toLocaleString('fr-FR')} HTG
+                          </div>
+                        )}
                       </td>
                       <td>
                         <span className={`badge border ${STATUS_STYLES[commission.status] || 'bg-gray-50'}`}>
@@ -261,6 +316,46 @@ export default function EarningsPage() {
                 )}
               </tbody>
             </table>
+          </div>
+        </div>
+
+        <div className="card mt-6 p-6">
+          <div className="mb-5">
+            <h2 className="font-display text-2xl text-agri-dark">Dernières activités réseau</h2>
+            <p className="mt-1 text-sm text-gray-500">Qui a acheté, quelle commande a généré quelle commission.</p>
+          </div>
+          <div className="grid gap-4 lg:grid-cols-2">
+            {(activityData?.recentCommissions || []).length > 0 ? (
+              activityData!.recentCommissions.slice(0, 8).map((commission) => (
+                <div key={commission.id} className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-semibold text-agri-dark">{commission.sourceUserId}</div>
+                      <div className="mt-1 text-xs text-gray-400">
+                        {commission.orderNumber ? `Commande ${commission.orderNumber}` : 'Commission système'}
+                      </div>
+                    </div>
+                    <span className={`badge border ${STATUS_STYLES[commission.status] || 'bg-gray-50'}`}>
+                      {STATUS_LABELS[commission.status] || commission.status}
+                    </span>
+                  </div>
+                  <div className="mt-4 grid grid-cols-2 gap-3 text-sm">
+                    <div className="rounded-2xl bg-gray-50 px-3 py-2">
+                      <div className="text-xs text-gray-400">Commande</div>
+                      <div className="font-semibold text-agri-dark">{Number(commission.orderTotal || 0).toLocaleString('fr-FR')} HTG</div>
+                    </div>
+                    <div className="rounded-2xl bg-agri-green-50 px-3 py-2">
+                      <div className="text-xs text-agri-green-700/70">Commission</div>
+                      <div className="font-semibold text-agri-green-800">+{Number(commission.amount).toLocaleString('fr-FR')} HTG</div>
+                    </div>
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500 lg:col-span-2">
+                Aucune activité commission récente.
+              </div>
+            )}
           </div>
         </div>
     </DashboardShell>
