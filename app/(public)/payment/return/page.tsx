@@ -35,6 +35,7 @@ export default function PaymentReturnPage() {
   const [isMarkingFailed, setIsMarkingFailed] = useState(false);
   const hasStartedRef = useRef(false);
   const [returnReference, setReturnReference] = useState<string | null>(null);
+  const [returnTransactionId, setReturnTransactionId] = useState<string | null>(null);
   const [returnStatusHint, setReturnStatusHint] = useState<'success' | 'cancelled' | 'failed' | null>(null);
 
   useEffect(() => {
@@ -54,6 +55,12 @@ export default function PaymentReturnPage() {
       params.get('reference') ||
       params.get('referenceId') ||
       params.get('orderNumber') ||
+      null
+    );
+    setReturnTransactionId(
+      params.get('transactionId') ||
+      params.get('transaction_id') ||
+      params.get('transaction') ||
       null
     );
 
@@ -150,7 +157,10 @@ export default function PaymentReturnPage() {
         return;
       }
 
-      const verification = await verifyOrderPayment(targetOrder.id);
+      const verification = await verifyOrderPayment(targetOrder.id, {
+        transactionId: returnTransactionId,
+        referenceId: returnReference,
+      });
       setActiveOrder(verification.order);
 
       if (verification.payment.transactionStatus === 'PAID') {
@@ -176,7 +186,7 @@ export default function PaymentReturnPage() {
     if (!token || !user || isLoading || hasStartedRef.current) return;
     hasStartedRef.current = true;
     void resolvePayment();
-  }, [isLoading, returnReference, returnStatusHint, token, user]);
+  }, [isLoading, returnReference, returnStatusHint, returnTransactionId, token, user]);
 
   const handleMarkFailed = async (reason: 'cancelled' | 'failed') => {
     if (!activeOrder) return;

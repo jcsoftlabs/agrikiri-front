@@ -232,8 +232,11 @@ export const createOrder = async (
   };
 };
 
-export const verifyOrderPayment = async (orderId: string): Promise<VerifyOrderPaymentResponse> => {
-  const { data } = await api.post(`/orders/${orderId}/verify-payment`);
+export const verifyOrderPayment = async (
+  orderId: string,
+  payload?: { transactionId?: string | null; referenceId?: string | null }
+): Promise<VerifyOrderPaymentResponse> => {
+  const { data } = await api.post(`/orders/${orderId}/verify-payment`, payload || {});
   return {
     order: normalizeOrder(data.data.order),
     payment: data.data.payment,

@@ -50,7 +50,7 @@ export default function MyOrdersPage() {
     queryFn: () => getMyOrders(1, 20),
   });
   const verifyPaymentMutation = useMutation({
-    mutationFn: verifyOrderPayment,
+    mutationFn: (orderId: string) => verifyOrderPayment(orderId),
     onSuccess: (result) => {
       queryClient.invalidateQueries({ queryKey: ['my-orders'] });
       if (result.payment.transactionStatus === 'PAID') {

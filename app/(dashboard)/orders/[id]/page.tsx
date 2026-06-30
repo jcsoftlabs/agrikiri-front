@@ -66,7 +66,7 @@ export default function OrderDetailPage() {
   });
 
   const verifyMutation = useMutation({
-    mutationFn: verifyOrderPayment,
+    mutationFn: (targetOrderId: string) => verifyOrderPayment(targetOrderId),
     onSuccess: (result) => {
       queryClient.setQueryData(['order-detail', orderId], result.order);
       queryClient.invalidateQueries({ queryKey: ['my-orders'] });
