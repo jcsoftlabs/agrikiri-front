@@ -1,14 +1,15 @@
 'use client';
 
 import Link from 'next/link';
-import { useEffect } from 'react';
+import { FormEvent, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import LevelBadge from '@/components/mlm/LevelBadge';
 import QuotaProgress from '@/components/mlm/QuotaProgress';
 import DashboardShell from '@/components/dashboard/DashboardShell';
+import Button from '@/components/ui/Button';
 import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, ResponsiveContainer } from 'recharts';
-import { useQuery } from '@tanstack/react-query';
-import { downloadMyCommissionsCsv, getMyCommissionHistory, getMyCommissions, getMyMLMStats, getMyMlmActivity } from '@/lib/services/mlm';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { downloadMyCommissionsCsv, getMyCommissionHistory, getMyCommissions, getMyMLMStats, getMyMlmActivity, getMyWallet, requestWalletWithdrawal } from '@/lib/services/mlm';
 import { useAuthStore } from '@/store/authStore';
 import toast from 'react-hot-toast';
 
@@ -33,10 +34,38 @@ const STATUS_LABELS: Record<string, string> = {
   PAID: 'Payé',
 };
 
+const WITHDRAWAL_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'En attente',
+  APPROVED: 'Approuvé',
+  PROCESSING: 'En traitement',
+  PAID: 'Payé',
+  REJECTED: 'Rejeté',
+  CANCELLED: 'Annulé',
+};
+
+const TRANSACTION_LABELS: Record<string, string> = {
+  COMMISSION_CREDIT: 'Commission créditée',
+  WITHDRAWAL_HOLD: 'Retrait demandé',
+  WITHDRAWAL_RELEASE: 'Retrait libéré',
+  WITHDRAWAL_PAYOUT: 'Retrait payé',
+  ADMIN_ADJUSTMENT: 'Ajustement admin',
+};
+
+function formatMoney(value: number) {
+  return `${Number(value || 0).toLocaleString('fr-FR')} HTG`;
+}
+
 export default function EarningsPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const isAyizan = user?.role === 'AYIZAN';
+  const queryClient = useQueryClient();
+  const [withdrawalForm, setWithdrawalForm] = useState({
+    amount: '',
+    recipientPhone: user?.phone || '',
+    recipientName: user ? `${user.firstName} ${user.lastName}` : '',
+    userNote: '',
+  });
 
   useEffect(() => {
     if (user && user.role !== 'AYIZAN') {
@@ -48,6 +77,7 @@ export default function EarningsPage() {
   const { data: commissionsData, isLoading } = useQuery({ queryKey: ['mlm-commissions'], queryFn: getMyCommissions, enabled: isAyizan });
   const { data: historyData = [] } = useQuery({ queryKey: ['mlm-commission-history'], queryFn: getMyCommissionHistory, enabled: isAyizan });
   const { data: activityData } = useQuery({ queryKey: ['mlm-activity'], queryFn: getMyMlmActivity, enabled: isAyizan });
+  const { data: walletData } = useQuery({ queryKey: ['mlm-wallet'], queryFn: getMyWallet, enabled: isAyizan });
 
   const stats = statsData || {
     monthlyCommissions: 0,
@@ -66,6 +96,33 @@ export default function EarningsPage() {
   const paidEarnings = commissions.reduce((sum, c) => sum + (c.status === 'PAID' ? Number(c.amount) : 0), 0);
   const thisMonthEarnings = stats.monthlyCommissions || 0;
   const potentialMonthlyCommission = Number(stats.currentLevel?.monthlyCommission || 0);
+  const wallet = walletData?.wallet;
+  const minimumWithdrawalAmount = walletData?.minimumWithdrawalAmount || 100;
+  const requestedAmount = Number(withdrawalForm.amount || 0);
+
+  const withdrawalMutation = useMutation({
+    mutationFn: requestWalletWithdrawal,
+    onSuccess: () => {
+      toast.success('Demande de retrait MonCash envoyée.');
+      setWithdrawalForm((current) => ({ ...current, amount: '', userNote: '' }));
+      queryClient.invalidateQueries({ queryKey: ['mlm-wallet'] });
+      queryClient.invalidateQueries({ queryKey: ['mlm-commissions'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Impossible de demander ce retrait.');
+    },
+  });
+
+  const handleWithdrawalSubmit = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    withdrawalMutation.mutate({
+      amount: requestedAmount,
+      method: 'MONCASH',
+      recipientName: withdrawalForm.recipientName,
+      recipientPhone: withdrawalForm.recipientPhone,
+      userNote: withdrawalForm.userNote,
+    });
+  };
 
   const handleExportCsv = async () => {
     try {
@@ -103,17 +160,17 @@ export default function EarningsPage() {
         <div className="p-6">
           <div className="text-xs uppercase tracking-[0.3em] text-white/60">Performance MLM</div>
           <div className="mt-3 text-5xl font-bold text-white font-display md:text-6xl">
-            {totalEarnings.toLocaleString()}
+            {Number(wallet?.availableBalance || paidEarnings).toLocaleString('fr-FR')}
             <span className="ml-2 text-2xl font-normal text-white/70">HTG</span>
           </div>
-          <p className="mt-2 text-white/70">Commissions totales cumulées</p>
+          <p className="mt-2 text-white/70">Solde disponible dans votre wallet MLM</p>
         </div>
 
         <div className="grid gap-px bg-white/10 sm:grid-cols-3">
           {[
-            { label: 'Ce mois', value: `${Number(thisMonthEarnings).toLocaleString()} HTG` },
-            { label: 'En attente', value: `${Number(pendingEarnings).toLocaleString()} HTG` },
-            { label: 'Déjà payé', value: `${Number(paidEarnings).toLocaleString()} HTG` },
+            { label: 'Crédité total', value: formatMoney(wallet?.totalEarned || paidEarnings) },
+            { label: 'Retraits en cours', value: formatMoney(wallet?.pendingWithdrawalAmount || 0) },
+            { label: 'Déjà retiré', value: formatMoney(wallet?.totalWithdrawn || 0) },
           ].map((item) => (
             <div key={item.label} className="bg-white/10 px-5 py-4 backdrop-blur-sm">
               <div className="text-xl font-bold text-white">{item.value}</div>
@@ -127,21 +184,110 @@ export default function EarningsPage() {
           <div className="lg:col-span-2 card overflow-hidden p-0">
             <div className="border-b border-gray-100 px-6 py-4">
               <h2 className="font-display text-2xl text-agri-dark">Portefeuille commissions</h2>
-              <p className="mt-1 text-sm text-gray-500">Vue simple des gains avant le futur module wallet/retrait.</p>
+              <p className="mt-1 text-sm text-gray-500">Wallet MLM réel : commissions créditées, retraits en attente et historique financier.</p>
             </div>
             <div className="grid gap-3 p-4 sm:grid-cols-2 sm:p-6 xl:grid-cols-4">
               {[
-                { label: 'Disponible bientôt', value: validatedEarnings, tone: 'bg-blue-50 text-blue-700 border-blue-100', help: 'Commissions validées, pas encore payées.' },
-                { label: 'En attente', value: pendingEarnings, tone: 'bg-amber-50 text-amber-700 border-amber-100', help: 'À valider par le système/admin.' },
-                { label: 'Payé', value: paidEarnings, tone: 'bg-green-50 text-green-700 border-green-100', help: 'Déjà marqué comme payé.' },
-                { label: 'Total reconnu', value: totalEarnings, tone: 'bg-agri-green-50 text-agri-green-800 border-agri-green-100', help: 'Validé + payé.' },
+                { label: 'Disponible', value: wallet?.availableBalance || 0, tone: 'bg-agri-green-50 text-agri-green-800 border-agri-green-100', help: 'Montant que vous pouvez demander en retrait.' },
+                { label: 'Retrait en cours', value: wallet?.pendingWithdrawalAmount || 0, tone: 'bg-blue-50 text-blue-700 border-blue-100', help: 'Montant réservé pendant validation/paiement.' },
+                { label: 'En attente commission', value: pendingEarnings + validatedEarnings, tone: 'bg-amber-50 text-amber-700 border-amber-100', help: 'Commissions pas encore créditées au wallet.' },
+                { label: 'Retiré', value: wallet?.totalWithdrawn || 0, tone: 'bg-gray-50 text-gray-700 border-gray-100', help: 'Montant déjà sorti du wallet.' },
               ].map((item) => (
                 <div key={item.label} className={`rounded-[24px] border p-4 ${item.tone}`}>
                   <div className="text-xs font-semibold uppercase tracking-[0.18em] opacity-70">{item.label}</div>
-                  <div className="mt-3 text-2xl font-bold">{Number(item.value).toLocaleString()} HTG</div>
+                  <div className="mt-3 text-2xl font-bold">{formatMoney(Number(item.value))}</div>
                   <p className="mt-2 text-xs leading-relaxed opacity-75">{item.help}</p>
                 </div>
               ))}
+            </div>
+
+            <div className="border-t border-gray-100 p-4 sm:p-6">
+              <div className="grid gap-5 lg:grid-cols-[1fr_1.1fr]">
+                <div className="rounded-[26px] border border-agri-green-100 bg-gradient-to-br from-agri-green-50 to-white p-5">
+                  <div className="text-xs font-semibold uppercase tracking-[0.22em] text-agri-green-700">Retrait MonCash</div>
+                  <h3 className="mt-2 font-display text-2xl text-agri-dark">Demander un retrait</h3>
+                  <p className="mt-2 text-sm leading-relaxed text-gray-500">
+                    Le montant est réservé dès la demande. L’admin/comptable le valide puis le marque payé avec la référence MonCash.
+                  </p>
+                  <form onSubmit={handleWithdrawalSubmit} className="mt-5 space-y-3">
+                    <input
+                      type="number"
+                      min={minimumWithdrawalAmount}
+                      step="0.01"
+                      value={withdrawalForm.amount}
+                      onChange={(event) => setWithdrawalForm((current) => ({ ...current, amount: event.target.value }))}
+                      className="input"
+                      placeholder={`Montant minimum ${minimumWithdrawalAmount} HTG`}
+                    />
+                    <input
+                      type="text"
+                      value={withdrawalForm.recipientName}
+                      onChange={(event) => setWithdrawalForm((current) => ({ ...current, recipientName: event.target.value }))}
+                      className="input"
+                      placeholder="Nom destinataire MonCash"
+                    />
+                    <input
+                      type="tel"
+                      value={withdrawalForm.recipientPhone}
+                      onChange={(event) => setWithdrawalForm((current) => ({ ...current, recipientPhone: event.target.value }))}
+                      className="input"
+                      placeholder="Téléphone MonCash"
+                    />
+                    <textarea
+                      value={withdrawalForm.userNote}
+                      onChange={(event) => setWithdrawalForm((current) => ({ ...current, userNote: event.target.value }))}
+                      className="input min-h-[90px] resize-none"
+                      placeholder="Note optionnelle"
+                    />
+                    <Button
+                      type="submit"
+                      className="w-full"
+                      loading={withdrawalMutation.isPending}
+                      disabled={!wallet || requestedAmount < minimumWithdrawalAmount || requestedAmount > Number(wallet.availableBalance || 0)}
+                    >
+                      Demander le retrait MonCash
+                    </Button>
+                  </form>
+                </div>
+
+                <div className="rounded-[26px] border border-gray-100 bg-white p-5 shadow-sm">
+                  <div className="flex items-center justify-between gap-3">
+                    <div>
+                      <div className="text-xs font-semibold uppercase tracking-[0.22em] text-gray-400">Historique wallet</div>
+                      <h3 className="mt-2 font-display text-2xl text-agri-dark">Mouvements récents</h3>
+                    </div>
+                    <div className="rounded-2xl bg-agri-green-50 px-3 py-2 text-sm font-bold text-agri-green-800">
+                      {formatMoney(wallet?.availableBalance || 0)}
+                    </div>
+                  </div>
+                  <div className="mt-4 space-y-3">
+                    {(walletData?.transactions || []).slice(0, 6).length > 0 ? (
+                      walletData!.transactions.slice(0, 6).map((transaction) => (
+                        <div key={transaction.id} className="rounded-2xl border border-gray-100 bg-gray-50 px-4 py-3">
+                          <div className="flex items-start justify-between gap-3">
+                            <div>
+                              <div className="font-semibold text-agri-dark">
+                                {TRANSACTION_LABELS[transaction.type] || transaction.type}
+                              </div>
+                              <div className="mt-1 text-xs text-gray-500">{transaction.description}</div>
+                            </div>
+                            <div className={transaction.amount >= 0 ? 'font-bold text-agri-green-700' : 'font-bold text-red-600'}>
+                              {transaction.amount >= 0 ? '+' : ''}{formatMoney(transaction.amount)}
+                            </div>
+                          </div>
+                          <div className="mt-2 text-xs text-gray-400">
+                            {new Date(transaction.createdAt).toLocaleDateString('fr-HT')} · Solde {formatMoney(transaction.balanceAfter)}
+                          </div>
+                        </div>
+                      ))
+                    ) : (
+                      <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 p-5 text-center text-sm text-gray-500">
+                        Aucun mouvement wallet pour le moment.
+                      </div>
+                    )}
+                  </div>
+                </div>
+              </div>
             </div>
 
             <div className="border-t border-gray-100 p-4 sm:p-6">
@@ -201,6 +347,38 @@ export default function EarningsPage() {
               </div>
               <div className="text-xs text-agri-green-600 mt-1">Si quota 546 VP atteint</div>
             </div>
+          </div>
+        </div>
+
+        <div className="card mb-6 p-6">
+          <div className="mb-5">
+            <h2 className="font-display text-2xl text-agri-dark">Demandes de retrait</h2>
+            <p className="mt-1 text-sm text-gray-500">Suivi des retraits MonCash et autres moyens qui seront activés ensuite.</p>
+          </div>
+          <div className="grid gap-3 lg:grid-cols-2">
+            {(walletData?.withdrawals || []).length > 0 ? (
+              walletData!.withdrawals.map((withdrawal) => (
+                <div key={withdrawal.id} className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-bold text-agri-dark">{formatMoney(withdrawal.amount)}</div>
+                      <div className="mt-1 text-sm text-gray-500">{withdrawal.method} · {withdrawal.recipientPhone}</div>
+                    </div>
+                    <span className={`badge border ${withdrawal.status === 'PAID' ? 'bg-green-50 text-green-700 border-green-200' : withdrawal.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                      {WITHDRAWAL_STATUS_LABELS[withdrawal.status] || withdrawal.status}
+                    </span>
+                  </div>
+                  <div className="mt-3 text-xs text-gray-400">
+                    Demandé le {new Date(withdrawal.createdAt).toLocaleDateString('fr-HT')}
+                    {withdrawal.externalReference ? ` · Réf. ${withdrawal.externalReference}` : ''}
+                  </div>
+                </div>
+              ))
+            ) : (
+              <div className="rounded-[24px] border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500 lg:col-span-2">
+                Aucun retrait demandé.
+              </div>
+            )}
           </div>
         </div>
 

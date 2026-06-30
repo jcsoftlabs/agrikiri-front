@@ -1,19 +1,39 @@
 'use client';
 
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useState } from 'react';
 import Link from 'next/link';
 import Button from '@/components/ui/Button';
 import LevelBadge, { MLM_LEVEL_CONFIG } from '@/components/mlm/LevelBadge';
 import AdminSidebar from '@/components/admin/AdminSidebar';
-import { getAdminMlmStats, validateMonthlyQuota } from '@/lib/services/mlm';
+import { getAdminMlmStats, getAdminWalletWithdrawals, updateAdminWalletWithdrawal, validateMonthlyQuota } from '@/lib/services/mlm';
 import toast from 'react-hot-toast';
+
+const WITHDRAWAL_STATUS_LABELS: Record<string, string> = {
+  PENDING: 'En attente',
+  APPROVED: 'Approuvé',
+  PROCESSING: 'En traitement',
+  PAID: 'Payé',
+  REJECTED: 'Rejeté',
+  CANCELLED: 'Annulé',
+};
+
+function formatMoney(value: number) {
+  return `${Number(value || 0).toLocaleString('fr-FR')} HTG`;
+}
 
 export default function AdminMlmPage() {
   const queryClient = useQueryClient();
+  const [withdrawalReference, setWithdrawalReference] = useState<Record<string, string>>({});
 
   const { data: globalStats, isLoading } = useQuery({
     queryKey: ['admin-mlm-stats'],
     queryFn: getAdminMlmStats,
+  });
+
+  const { data: withdrawals = [], isLoading: withdrawalsLoading } = useQuery({
+    queryKey: ['admin-wallet-withdrawals'],
+    queryFn: getAdminWalletWithdrawals,
   });
 
   const validateMutation = useMutation({
@@ -24,6 +44,22 @@ export default function AdminMlmPage() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Erreur lors de la validation');
+    },
+  });
+
+  const updateWithdrawalMutation = useMutation({
+    mutationFn: ({ id, status }: { id: string; status: 'PAID' | 'REJECTED' | 'APPROVED' | 'PROCESSING' }) =>
+      updateAdminWalletWithdrawal(id, {
+        status,
+        externalReference: withdrawalReference[id],
+      }),
+    onSuccess: () => {
+      toast.success('Retrait mis à jour.');
+      queryClient.invalidateQueries({ queryKey: ['admin-wallet-withdrawals'] });
+      queryClient.invalidateQueries({ queryKey: ['admin-mlm-stats'] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Impossible de mettre à jour le retrait.');
     },
   });
 
@@ -131,6 +167,100 @@ export default function AdminMlmPage() {
               <p className="text-center py-6 text-gray-400 italic">Aucun membre enregistré dans le réseau MLM</p>
             )}
           </div>
+        </div>
+
+        <div className="card p-6 mb-8">
+          <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="font-semibold text-agri-dark text-lg">Retraits wallet MLM</h2>
+              <p className="mt-1 text-sm text-gray-500">Demandes de retrait MonCash/NatCash à payer et référencer.</p>
+            </div>
+            <div className="rounded-2xl bg-agri-green-50 px-4 py-2 text-sm font-semibold text-agri-green-800">
+              {withdrawals.filter((item) => item.status === 'PENDING').length} en attente
+            </div>
+          </div>
+
+          {withdrawalsLoading ? (
+            <div className="space-y-3">
+              {[...Array(3)].map((_, index) => <div key={index} className="shimmer h-24 w-full rounded-2xl" />)}
+            </div>
+          ) : withdrawals.length > 0 ? (
+            <div className="grid gap-4 xl:grid-cols-2">
+              {withdrawals.map((withdrawal) => (
+                <div key={withdrawal.id} className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm">
+                  <div className="flex items-start justify-between gap-3">
+                    <div>
+                      <div className="font-bold text-agri-dark">
+                        {withdrawal.user.firstName} {withdrawal.user.lastName}
+                      </div>
+                      <div className="mt-1 text-sm text-gray-500">{withdrawal.user.email}</div>
+                      <div className="mt-2 text-2xl font-bold text-agri-green-700">{formatMoney(withdrawal.amount)}</div>
+                    </div>
+                    <span className={`badge border ${withdrawal.status === 'PAID' ? 'bg-green-50 text-green-700 border-green-200' : withdrawal.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
+                      {WITHDRAWAL_STATUS_LABELS[withdrawal.status] || withdrawal.status}
+                    </span>
+                  </div>
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-gray-50 px-3 py-2">
+                      <div className="text-xs uppercase tracking-wide text-gray-400">Méthode</div>
+                      <div className="font-semibold text-agri-dark">{withdrawal.method}</div>
+                    </div>
+                    <div className="rounded-2xl bg-gray-50 px-3 py-2">
+                      <div className="text-xs uppercase tracking-wide text-gray-400">Destinataire</div>
+                      <div className="font-semibold text-agri-dark">{withdrawal.recipientPhone}</div>
+                    </div>
+                  </div>
+
+                  {withdrawal.status !== 'PAID' && withdrawal.status !== 'REJECTED' && withdrawal.status !== 'CANCELLED' && (
+                    <div className="mt-4 space-y-3">
+                      <input
+                        className="input"
+                        placeholder="Référence MonCash après paiement"
+                        value={withdrawalReference[withdrawal.id] || ''}
+                        onChange={(event) => setWithdrawalReference((current) => ({ ...current, [withdrawal.id]: event.target.value }))}
+                      />
+                      <div className="grid gap-2 sm:grid-cols-3">
+                        <Button
+                          variant="secondary"
+                          size="sm"
+                          onClick={() => updateWithdrawalMutation.mutate({ id: withdrawal.id, status: 'APPROVED' })}
+                          loading={updateWithdrawalMutation.isPending}
+                        >
+                          Approuver
+                        </Button>
+                        <Button
+                          variant="primary"
+                          size="sm"
+                          onClick={() => updateWithdrawalMutation.mutate({ id: withdrawal.id, status: 'PAID' })}
+                          loading={updateWithdrawalMutation.isPending}
+                        >
+                          Marquer payé
+                        </Button>
+                        <Button
+                          variant="danger"
+                          size="sm"
+                          onClick={() => updateWithdrawalMutation.mutate({ id: withdrawal.id, status: 'REJECTED' })}
+                          loading={updateWithdrawalMutation.isPending}
+                        >
+                          Rejeter
+                        </Button>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-3 text-xs text-gray-400">
+                    Demandé le {new Date(withdrawal.createdAt).toLocaleDateString('fr-HT')}
+                    {withdrawal.externalReference ? ` · Réf. ${withdrawal.externalReference}` : ''}
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div className="rounded-[24px] border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500">
+              Aucun retrait wallet pour le moment.
+            </div>
+          )}
         </div>
 
         {/* Section explicative */}

@@ -77,6 +77,60 @@ export interface MlmActivity {
   recentCommissions: Commission[];
 }
 
+export interface WalletTransaction {
+  id: string;
+  type: string;
+  amount: number;
+  balanceAfter: number;
+  description: string;
+  createdAt: string;
+  withdrawal?: {
+    id: string;
+    status: string;
+    method: string;
+    recipientPhone: string;
+    externalReference?: string | null;
+  } | null;
+}
+
+export interface WalletWithdrawal {
+  id: string;
+  amount: number;
+  method: string;
+  recipientName: string;
+  recipientPhone: string;
+  status: string;
+  externalReference?: string | null;
+  userNote?: string | null;
+  adminNote?: string | null;
+  reviewedAt?: string | null;
+  paidAt?: string | null;
+  createdAt: string;
+}
+
+export interface MlmWallet {
+  wallet: {
+    id: string;
+    balance: number;
+    pendingWithdrawalAmount: number;
+    totalEarned: number;
+    totalWithdrawn: number;
+    availableBalance: number;
+    updatedAt: string;
+  };
+  transactions: WalletTransaction[];
+  withdrawals: WalletWithdrawal[];
+  minimumWithdrawalAmount: number;
+}
+
+export interface WithdrawalInput {
+  amount: number;
+  method?: 'MONCASH' | 'NATCASH' | 'VIREMENT_BANCAIRE' | 'CASH';
+  recipientName?: string;
+  recipientPhone: string;
+  userNote?: string;
+}
+
 export interface NetworkMember {
   id: string;
   firstName: string;
@@ -216,6 +270,41 @@ export const getMyMlmActivity = async (): Promise<MlmActivity> => {
   };
 };
 
+export const getMyWallet = async (): Promise<MlmWallet> => {
+  const { data } = await api.get('/commissions/wallet');
+  const payload = data.data;
+
+  return {
+    wallet: {
+      id: payload.wallet.id,
+      balance: toNumber(payload.wallet.balance),
+      pendingWithdrawalAmount: toNumber(payload.wallet.pendingWithdrawalAmount),
+      totalEarned: toNumber(payload.wallet.totalEarned),
+      totalWithdrawn: toNumber(payload.wallet.totalWithdrawn),
+      availableBalance: toNumber(payload.wallet.availableBalance),
+      updatedAt: payload.wallet.updatedAt,
+    },
+    transactions: (payload.transactions || []).map((item: any) => ({
+      ...item,
+      amount: toNumber(item.amount),
+      balanceAfter: toNumber(item.balanceAfter),
+    })),
+    withdrawals: (payload.withdrawals || []).map((item: any) => ({
+      ...item,
+      amount: toNumber(item.amount),
+    })),
+    minimumWithdrawalAmount: toNumber(payload.minimumWithdrawalAmount),
+  };
+};
+
+export const requestWalletWithdrawal = async (input: WithdrawalInput): Promise<WalletWithdrawal> => {
+  const { data } = await api.post('/commissions/wallet/withdrawals', input);
+  return {
+    ...data.data,
+    amount: toNumber(data.data.amount),
+  };
+};
+
 export const downloadMyCommissionsCsv = async (): Promise<Blob> => {
   const response = await api.get('/commissions/export/my', { responseType: 'blob' });
   return response.data;
@@ -288,6 +377,21 @@ export interface MLMGlobalStats {
   totalCommissionsThisMonth: number;
 }
 
+export interface AdminWalletWithdrawal extends WalletWithdrawal {
+  user: {
+    firstName: string;
+    lastName: string;
+    email: string;
+    phone: string;
+    mlmLevel: string;
+  };
+  reviewedBy?: {
+    firstName: string;
+    lastName: string;
+    email: string;
+  } | null;
+}
+
 // Get global MLM stats for admin
 export const getAdminMlmStats = async (): Promise<MLMGlobalStats> => {
   const { data } = await api.get('/mlm/stats');
@@ -298,4 +402,23 @@ export const getAdminMlmStats = async (): Promise<MLMGlobalStats> => {
 export const validateMonthlyQuota = async (month?: number, year?: number) => {
   const { data } = await api.post('/mlm/validate-quota', { month, year });
   return data.data;
+};
+
+export const getAdminWalletWithdrawals = async (): Promise<AdminWalletWithdrawal[]> => {
+  const { data } = await api.get('/commissions/withdrawals', { params: { limit: 20 } });
+  return (data.data?.withdrawals || []).map((item: any) => ({
+    ...item,
+    amount: toNumber(item.amount),
+  }));
+};
+
+export const updateAdminWalletWithdrawal = async (
+  id: string,
+  input: { status: 'APPROVED' | 'PROCESSING' | 'PAID' | 'REJECTED' | 'CANCELLED'; externalReference?: string; adminNote?: string }
+): Promise<AdminWalletWithdrawal> => {
+  const { data } = await api.patch(`/commissions/withdrawals/${id}`, input);
+  return {
+    ...data.data,
+    amount: toNumber(data.data.amount),
+  };
 };
