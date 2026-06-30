@@ -128,6 +128,7 @@ export default function EarningsPage() {
   const activeWithdrawals = withdrawals.filter((withdrawal) =>
     ['PENDING', 'APPROVED', 'PROCESSING'].includes(withdrawal.status)
   );
+  const moncashWithdrawalTemporarilyDisabled = true;
 
   const withdrawalMutation = useMutation({
     mutationFn: requestWalletWithdrawal,
@@ -244,6 +245,11 @@ export default function EarningsPage() {
                   <p className="mt-2 text-sm leading-relaxed text-gray-500">
                     Le système tente l’envoi MonCash automatiquement. Si le numéro n’est pas valide ou si MonCash refuse l’opération, le montant revient dans votre wallet.
                   </p>
+                  {moncashWithdrawalTemporarilyDisabled ? (
+                    <div className="mt-4 rounded-2xl border border-red-200 bg-red-50 px-4 py-3 text-sm font-medium text-red-700">
+                      Cloudflare ssl not foudn
+                    </div>
+                  ) : null}
                   <form onSubmit={handleWithdrawalSubmit} className="mt-5 space-y-3">
                     <input
                       type="number"
@@ -294,7 +300,13 @@ export default function EarningsPage() {
                       type="submit"
                       className="w-full"
                       loading={withdrawalMutation.isPending}
-                      disabled={!wallet || !hasValidMonCashPhone || requestedAmount < minimumWithdrawalAmount || requestedAmount > Number(wallet.availableBalance || 0)}
+                      disabled={
+                        moncashWithdrawalTemporarilyDisabled ||
+                        !wallet ||
+                        !hasValidMonCashPhone ||
+                        requestedAmount < minimumWithdrawalAmount ||
+                        requestedAmount > Number(wallet.availableBalance || 0)
+                      }
                     >
                       Retirer via MonCash
                     </Button>
