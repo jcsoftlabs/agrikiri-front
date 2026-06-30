@@ -102,8 +102,14 @@ export default function EarningsPage() {
 
   const withdrawalMutation = useMutation({
     mutationFn: requestWalletWithdrawal,
-    onSuccess: () => {
-      toast.success('Demande de retrait MonCash envoyée.');
+    onSuccess: (withdrawal) => {
+      if (withdrawal.status === 'PAID') {
+        toast.success('Retrait MonCash envoyé avec succès.');
+      } else if (withdrawal.status === 'PROCESSING') {
+        toast.success('Retrait MonCash en cours de traitement.');
+      } else {
+        toast.success('Demande de retrait enregistrée.');
+      }
       setWithdrawalForm((current) => ({ ...current, amount: '', userNote: '' }));
       queryClient.invalidateQueries({ queryKey: ['mlm-wallet'] });
       queryClient.invalidateQueries({ queryKey: ['mlm-commissions'] });
@@ -207,7 +213,7 @@ export default function EarningsPage() {
                   <div className="text-xs font-semibold uppercase tracking-[0.22em] text-agri-green-700">Retrait MonCash</div>
                   <h3 className="mt-2 font-display text-2xl text-agri-dark">Demander un retrait</h3>
                   <p className="mt-2 text-sm leading-relaxed text-gray-500">
-                    Le montant est réservé dès la demande. L’admin/comptable le valide puis le marque payé avec la référence MonCash.
+                    Le système tente l’envoi MonCash automatiquement. Si le numéro n’est pas valide ou si MonCash refuse l’opération, le montant revient dans votre wallet.
                   </p>
                   <form onSubmit={handleWithdrawalSubmit} className="mt-5 space-y-3">
                     <input
@@ -245,7 +251,7 @@ export default function EarningsPage() {
                       loading={withdrawalMutation.isPending}
                       disabled={!wallet || requestedAmount < minimumWithdrawalAmount || requestedAmount > Number(wallet.availableBalance || 0)}
                     >
-                      Demander le retrait MonCash
+                      Retirer via MonCash
                     </Button>
                   </form>
                 </div>

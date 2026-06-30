@@ -173,7 +173,7 @@ export default function AdminMlmPage() {
           <div className="mb-5 flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="font-semibold text-agri-dark text-lg">Retraits wallet MLM</h2>
-              <p className="mt-1 text-sm text-gray-500">Demandes de retrait MonCash/NatCash à payer et référencer.</p>
+              <p className="mt-1 text-sm text-gray-500">Suivi des retraits wallet. Les retraits MonCash partent automatiquement, cette section sert surtout au contrôle et aux exceptions.</p>
             </div>
             <div className="rounded-2xl bg-agri-green-50 px-4 py-2 text-sm font-semibold text-agri-green-800">
               {withdrawals.filter((item) => item.status === 'PENDING').length} en attente
@@ -216,7 +216,7 @@ export default function AdminMlmPage() {
                     <div className="mt-4 space-y-3">
                       <input
                         className="input"
-                        placeholder="Référence MonCash après paiement"
+                        placeholder="Référence externe (si besoin)"
                         value={withdrawalReference[withdrawal.id] || ''}
                         onChange={(event) => setWithdrawalReference((current) => ({ ...current, [withdrawal.id]: event.target.value }))}
                       />
@@ -235,7 +235,7 @@ export default function AdminMlmPage() {
                           onClick={() => updateWithdrawalMutation.mutate({ id: withdrawal.id, status: 'PAID' })}
                           loading={updateWithdrawalMutation.isPending}
                         >
-                          Marquer payé
+                          Finaliser
                         </Button>
                         <Button
                           variant="danger"
@@ -271,7 +271,7 @@ export default function AdminMlmPage() {
               <h3 className="font-bold text-agri-green-800 mb-1">Comment fonctionne la validation ?</h3>
               <p className="text-sm text-agri-green-700 leading-relaxed">
                 Le bouton <strong>"Valider quota mensuel"</strong> déclenche le calcul final des commissions pour tous les membres ayant atteint leur quota de 546 VP ce mois-ci. 
-                Cette action est irréversible pour le mois en cours et génèrera les écritures de commissions "Validées" prêtes pour le paiement.
+                Cette action est irréversible pour le mois en cours et génèrera les écritures de commissions "Validées" prêtes pour le crédit du wallet.
               </p>
             </div>
           </div>
