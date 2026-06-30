@@ -123,6 +123,11 @@ export default function EarningsPage() {
   const minimumWithdrawalAmount = walletData?.minimumWithdrawalAmount || 100;
   const requestedAmount = Number(withdrawalForm.amount || 0);
   const hasValidMonCashPhone = withdrawalForm.recipientPhone.length === 8;
+  const withdrawals = walletData?.withdrawals || [];
+  const paidWithdrawals = withdrawals.filter((withdrawal) => withdrawal.status === 'PAID');
+  const activeWithdrawals = withdrawals.filter((withdrawal) =>
+    ['PENDING', 'APPROVED', 'PROCESSING'].includes(withdrawal.status)
+  );
 
   const withdrawalMutation = useMutation({
     mutationFn: requestWalletWithdrawal,
@@ -397,32 +402,67 @@ export default function EarningsPage() {
         </div>
 
         <div className="card mb-6 p-6">
-          <div className="mb-5">
-            <h2 className="font-display text-2xl text-agri-dark">Demandes de retrait</h2>
-            <p className="mt-1 text-sm text-gray-500">Suivi des retraits MonCash et autres moyens qui seront activés ensuite.</p>
+          <div className="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+            <div>
+              <h2 className="font-display text-2xl text-agri-dark">Historique des retraits</h2>
+              <p className="mt-1 text-sm text-gray-500">Suivez chaque retrait MonCash demandé, payé ou retourné dans votre wallet.</p>
+            </div>
+            <div className="grid grid-cols-2 gap-3 sm:grid-cols-3">
+              <div className="rounded-2xl bg-agri-green-50 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-agri-green-700/70">Total</div>
+                <div className="mt-1 text-xl font-bold text-agri-green-800">{withdrawals.length}</div>
+              </div>
+              <div className="rounded-2xl bg-blue-50 px-4 py-3">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-blue-700/70">En cours</div>
+                <div className="mt-1 text-xl font-bold text-blue-800">{activeWithdrawals.length}</div>
+              </div>
+              <div className="rounded-2xl bg-gray-50 px-4 py-3 col-span-2 sm:col-span-1">
+                <div className="text-xs font-semibold uppercase tracking-[0.18em] text-gray-500">Payés</div>
+                <div className="mt-1 text-xl font-bold text-agri-dark">{paidWithdrawals.length}</div>
+              </div>
+            </div>
           </div>
-          <div className="grid gap-3 lg:grid-cols-2">
-            {(walletData?.withdrawals || []).length > 0 ? (
-              walletData!.withdrawals.map((withdrawal) => (
-                <div key={withdrawal.id} className="rounded-[24px] border border-gray-100 bg-white p-4 shadow-sm">
+
+          <div className="grid gap-4 lg:grid-cols-2">
+            {withdrawals.length > 0 ? (
+              withdrawals.map((withdrawal) => (
+                <div key={withdrawal.id} className="rounded-[24px] border border-gray-100 bg-white p-5 shadow-sm">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <div className="font-bold text-agri-dark">{formatMoney(withdrawal.amount)}</div>
-                      <div className="mt-1 text-sm text-gray-500">{withdrawal.method} · {withdrawal.recipientPhone}</div>
+                      <div className="mt-1 text-sm text-gray-500">{withdrawal.method} · +{withdrawal.recipientPhone}</div>
                     </div>
                     <span className={`badge border ${withdrawal.status === 'PAID' ? 'bg-green-50 text-green-700 border-green-200' : withdrawal.status === 'REJECTED' ? 'bg-red-50 text-red-700 border-red-200' : 'bg-blue-50 text-blue-700 border-blue-200'}`}>
                       {WITHDRAWAL_STATUS_LABELS[withdrawal.status] || withdrawal.status}
                     </span>
                   </div>
-                  <div className="mt-3 text-xs text-gray-400">
-                    Demandé le {new Date(withdrawal.createdAt).toLocaleDateString('fr-HT')}
-                    {withdrawal.externalReference ? ` · Réf. ${withdrawal.externalReference}` : ''}
+
+                  <div className="mt-4 grid gap-3 sm:grid-cols-2">
+                    <div className="rounded-2xl bg-gray-50 px-3 py-3">
+                      <div className="text-xs uppercase tracking-wide text-gray-400">Destinataire</div>
+                      <div className="mt-1 text-sm font-semibold text-agri-dark">{withdrawal.recipientName || 'Titulaire du wallet'}</div>
+                    </div>
+                    <div className="rounded-2xl bg-gray-50 px-3 py-3">
+                      <div className="text-xs uppercase tracking-wide text-gray-400">Demandé le</div>
+                      <div className="mt-1 text-sm font-semibold text-agri-dark">{new Date(withdrawal.createdAt).toLocaleDateString('fr-HT')}</div>
+                    </div>
+                  </div>
+
+                  <div className="mt-3 space-y-1 text-xs text-gray-500">
+                    {withdrawal.paidAt ? (
+                      <div>Payé le {new Date(withdrawal.paidAt).toLocaleDateString('fr-HT')}</div>
+                    ) : withdrawal.reviewedAt ? (
+                      <div>Mis à jour le {new Date(withdrawal.reviewedAt).toLocaleDateString('fr-HT')}</div>
+                    ) : null}
+                    {withdrawal.externalReference ? <div>Référence MonCash: {withdrawal.externalReference}</div> : null}
+                    {withdrawal.adminNote ? <div>Note système: {withdrawal.adminNote}</div> : null}
+                    {withdrawal.userNote ? <div>Votre note: {withdrawal.userNote}</div> : null}
                   </div>
                 </div>
               ))
             ) : (
               <div className="rounded-[24px] border border-dashed border-gray-200 bg-gray-50 p-6 text-center text-sm text-gray-500 lg:col-span-2">
-                Aucun retrait demandé.
+                Aucun retrait demandé pour le moment.
               </div>
             )}
           </div>
