@@ -55,6 +55,19 @@ function formatMoney(value: number) {
   return `${Number(value || 0).toLocaleString('fr-FR')} HTG`;
 }
 
+function extractMonCashLocalNumber(value?: string | null) {
+  const digits = (value || '').replace(/\D/g, '');
+  if (digits.length === 11 && digits.startsWith('509')) {
+    return digits.slice(3);
+  }
+
+  if (digits.length === 8) {
+    return digits;
+  }
+
+  return '';
+}
+
 export default function EarningsPage() {
   const router = useRouter();
   const { user } = useAuthStore();
@@ -62,7 +75,7 @@ export default function EarningsPage() {
   const queryClient = useQueryClient();
   const [withdrawalForm, setWithdrawalForm] = useState({
     amount: '',
-    recipientPhone: user?.phone || '',
+    recipientPhone: extractMonCashLocalNumber(user?.phone),
     recipientName: user ? `${user.firstName} ${user.lastName}` : '',
     userNote: '',
   });
@@ -72,6 +85,16 @@ export default function EarningsPage() {
       router.replace('/dashboard');
     }
   }, [router, user]);
+
+  useEffect(() => {
+    if (!user) return;
+
+    setWithdrawalForm((current) => ({
+      ...current,
+      recipientPhone: current.recipientPhone || extractMonCashLocalNumber(user.phone),
+      recipientName: current.recipientName || `${user.firstName} ${user.lastName}`,
+    }));
+  }, [user]);
 
   const { data: statsData } = useQuery({ queryKey: ['mlm-stats'], queryFn: getMyMLMStats, enabled: isAyizan });
   const { data: commissionsData, isLoading } = useQuery({ queryKey: ['mlm-commissions'], queryFn: getMyCommissions, enabled: isAyizan });
@@ -99,6 +122,7 @@ export default function EarningsPage() {
   const wallet = walletData?.wallet;
   const minimumWithdrawalAmount = walletData?.minimumWithdrawalAmount || 100;
   const requestedAmount = Number(withdrawalForm.amount || 0);
+  const hasValidMonCashPhone = withdrawalForm.recipientPhone.length === 8;
 
   const withdrawalMutation = useMutation({
     mutationFn: requestWalletWithdrawal,
@@ -232,13 +256,29 @@ export default function EarningsPage() {
                       className="input"
                       placeholder="Nom destinataire MonCash"
                     />
-                    <input
-                      type="tel"
-                      value={withdrawalForm.recipientPhone}
-                      onChange={(event) => setWithdrawalForm((current) => ({ ...current, recipientPhone: event.target.value }))}
-                      className="input"
-                      placeholder="Téléphone MonCash"
-                    />
+                    <div>
+                      <div className="flex overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-sm focus-within:border-agri-green-300">
+                        <div className="flex items-center border-r border-gray-200 bg-gray-50 px-4 text-sm font-semibold text-gray-600">
+                          +509
+                        </div>
+                        <input
+                          type="tel"
+                          inputMode="numeric"
+                          pattern="[0-9]{8}"
+                          maxLength={8}
+                          value={withdrawalForm.recipientPhone}
+                          onChange={(event) =>
+                            setWithdrawalForm((current) => ({
+                              ...current,
+                              recipientPhone: event.target.value.replace(/\D/g, '').slice(0, 8),
+                            }))
+                          }
+                          className="w-full bg-transparent px-4 py-3 text-base text-agri-dark outline-none"
+                          placeholder="37007294"
+                        />
+                      </div>
+                      <p className="mt-2 text-xs text-gray-500">Entrez uniquement les 8 chiffres du numéro MonCash.</p>
+                    </div>
                     <textarea
                       value={withdrawalForm.userNote}
                       onChange={(event) => setWithdrawalForm((current) => ({ ...current, userNote: event.target.value }))}
@@ -249,7 +289,7 @@ export default function EarningsPage() {
                       type="submit"
                       className="w-full"
                       loading={withdrawalMutation.isPending}
-                      disabled={!wallet || requestedAmount < minimumWithdrawalAmount || requestedAmount > Number(wallet.availableBalance || 0)}
+                      disabled={!wallet || !hasValidMonCashPhone || requestedAmount < minimumWithdrawalAmount || requestedAmount > Number(wallet.availableBalance || 0)}
                     >
                       Retirer via MonCash
                     </Button>

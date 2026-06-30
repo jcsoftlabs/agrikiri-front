@@ -30,7 +30,7 @@ const PAYMENT_OPTIONS: {
   {
     value: 'MONCASH',
     label: 'MonCash',
-    description: 'Paiement direct via votre wallet MonCash, sans passer par la passerelle PLOP PLOP.',
+    description: 'Paiement direct via votre wallet MonCash.',
   },
   { value: 'CASH', label: 'Paiement à la livraison', description: 'Réglement en espèces lors de la réception.' },
   {
@@ -243,7 +243,7 @@ function CartPageContent() {
   const clearCart = useCartStore((state) => state.clearCart);
 
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('CASH');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('MONCASH');
   const [currentStep, setCurrentStep] = useState<CheckoutStep>(1);
   const [selectedAddressId, setSelectedAddressId] = useState<string>('new');
   const [saveNewAddress, setSaveNewAddress] = useState(true);
