@@ -32,7 +32,7 @@ export interface CreateOrderPayload {
 }
 
 export interface OrderPaymentSession {
-  provider: 'PLOP_PLOP' | null;
+  provider: 'PLOP_PLOP' | 'MONCASH' | null;
   requiresRedirect: boolean;
   paymentUrl: string | null;
   transactionId: string | null;
@@ -71,7 +71,7 @@ export interface DeliveryProofLocation {
 export interface VerifyOrderPaymentResponse {
   order: Order;
   payment: {
-    provider: 'PLOP_PLOP';
+    provider: 'PLOP_PLOP' | 'MONCASH';
     referenceId: string;
     transactionId: string | null;
     transactionStatus: 'PAID' | 'PENDING';

@@ -1,6 +1,7 @@
 'use client';
 
 import { Suspense, useEffect, useMemo, useState } from 'react';
+import Image from 'next/image';
 import Link from 'next/link';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
@@ -26,6 +27,11 @@ const PAYMENT_OPTIONS: {
   description: string;
   disabled?: boolean;
 }[] = [
+  {
+    value: 'MONCASH',
+    label: 'MonCash',
+    description: 'Paiement direct via votre wallet MonCash, sans passer par la passerelle PLOP PLOP.',
+  },
   { value: 'CASH', label: 'Paiement à la livraison', description: 'Réglement en espèces lors de la réception.' },
   {
     value: 'PLOPPLOP',
@@ -37,6 +43,20 @@ const PAYMENT_OPTIONS: {
 function PaymentMethodIcon({ method }: { method: PaymentMethod }) {
   if (method === 'CASH') {
     return <span className="text-xl">💵</span>;
+  }
+
+  if (method === 'MONCASH') {
+    return (
+      <div className="rounded-2xl border border-agri-green-200 bg-white px-2 py-2 shadow-sm">
+        <Image
+          src="/MC_button_fr.png"
+          alt="Payer avec MonCash"
+          width={132}
+          height={40}
+          className="h-10 w-auto"
+        />
+      </div>
+    );
   }
 
   return (
@@ -161,7 +181,7 @@ function getDeliveryEstimate({
       label: `${cost.toLocaleString()} HTG`,
       eta: '5 à 10 jours ouvrés',
       service: 'Expédition internationale',
-      note: paymentMethod === 'PLOPPLOP' ? 'Paiement sécurisé avant expédition.' : 'Les commandes sont confirmées avant expédition.',
+      note: paymentMethod !== 'CASH' ? 'Paiement sécurisé avant expédition.' : 'Les commandes sont confirmées avant expédition.',
     };
   }
 
@@ -414,11 +434,11 @@ function CartPageContent() {
 
       clearCart();
       if (result.payment.requiresRedirect && result.payment.paymentUrl) {
-        const onlinePaymentMethod = paymentMethod === 'CASH' ? 'PLOPPLOP' : paymentMethod;
+        const redirectPaymentMethod = paymentMethod as Exclude<PaymentMethod, 'CASH'>;
         savePendingPaymentSession({
           orderId: result.order.id,
           orderNumber: result.order.orderNumber || result.payment.referenceId,
-          paymentMethod: onlinePaymentMethod,
+          paymentMethod: redirectPaymentMethod,
           referenceId: result.payment.referenceId,
           paymentUrl: result.payment.paymentUrl,
           createdAt: new Date().toISOString(),
