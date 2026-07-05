@@ -2,8 +2,10 @@ import type { Metadata } from 'next';
 import { Analytics } from '@vercel/analytics/next';
 import './globals.css';
 import Providers from '@/components/Providers';
+import { SITE_URL } from '@/lib/site';
 
 export const metadata: Metadata = {
+  metadataBase: new URL(SITE_URL),
   title: {
     default: 'AGRIKIRI — De nos champs haïtiens à votre table',
     template: '%s | AGRIKIRI',
@@ -14,8 +16,21 @@ export const metadata: Metadata = {
   openGraph: {
     title: 'AGRIKIRI — De nos champs haïtiens à votre table',
     description: 'Plateforme e-commerce de produits locaux haïtiens + réseau MLM',
+    url: SITE_URL,
+    siteName: 'AGRIKIRI',
     locale: 'fr_HT',
     type: 'website',
+  },
+  robots: {
+    index: true,
+    follow: true,
+    googleBot: {
+      index: true,
+      follow: true,
+      'max-image-preview': 'large',
+      'max-snippet': -1,
+      'max-video-preview': -1,
+    },
   },
   icons: {
     icon: '/images/logo.png',
