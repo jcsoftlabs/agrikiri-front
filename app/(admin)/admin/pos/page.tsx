@@ -2,6 +2,7 @@
 
 import { useDeferredValue, useEffect, useMemo, useRef, useState } from 'react';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import Link from 'next/link';
 import toast from 'react-hot-toast';
 import AdminSidebar from '@/components/admin/AdminSidebar';
 import Button from '@/components/ui/Button';
@@ -523,13 +524,20 @@ export default function AdminPosPage() {
           <section className="rounded-[28px] border border-[#e8e1d3] bg-white/95 p-5 shadow-lg md:p-6">
             <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-agri-green-600">Historique visible</p>
-                <h2 className="mt-2 font-display text-3xl text-agri-dark">Ventes POS effectuées</h2>
+                <p className="text-xs font-semibold uppercase tracking-[0.3em] text-agri-green-600">Résumé POS</p>
+                <h2 className="mt-2 font-display text-3xl text-agri-dark">Activité récente</h2>
                 <p className="mt-2 text-sm text-gray-500">
-                  Toutes les ventes POS récentes apparaissent ici avec téléchargement rapide et actions de suivi.
+                  Le mini POS reste centré sur la vente. L’historique complet est maintenant dans une page dédiée.
                 </p>
               </div>
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+                <Link
+                  href="/admin/pos/history"
+                  className="inline-flex items-center justify-center rounded-2xl border border-[#eadad1] bg-white px-4 py-3 text-sm font-semibold text-agri-dark transition-colors hover:bg-[#fff8f4]"
+                >
+                  Voir tout l’historique POS
+                </Link>
+                <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
                 <div className="rounded-2xl bg-[#f7f4ec] px-4 py-3">
                   <div className="text-xs uppercase tracking-[0.18em] text-[#9b8d80]">Total</div>
                   <div className="mt-1 text-2xl font-bold text-agri-dark">{recentSales.length}</div>
@@ -552,16 +560,17 @@ export default function AdminPosPage() {
                     {recentSales.filter((sale) => sale.documentType === 'PROFORMA').length}
                   </div>
                 </div>
+                </div>
               </div>
             </div>
 
-            <div className="mt-5 space-y-3 lg:hidden">
+            <div className="mt-5 space-y-3">
               {isRecentSalesLoading ? (
-                [...Array(3)].map((_, index) => (
-                  <div key={index} className="h-28 rounded-[20px] bg-[#f4f1e8] animate-pulse" />
+                [...Array(2)].map((_, index) => (
+                  <div key={index} className="h-24 rounded-[20px] bg-[#f4f1e8] animate-pulse" />
                 ))
               ) : recentSales.length ? (
-                recentSales.map((sale) => (
+                recentSales.slice(0, 3).map((sale) => (
                   <div key={sale.id} className="rounded-[22px] border border-[#ebe2d4] bg-[#fcfbf8] p-4">
                     <div className="flex items-start justify-between gap-3">
                       <div>
@@ -593,86 +602,17 @@ export default function AdminPosPage() {
                           Transformer
                         </Button>
                       ) : null}
+                      <Button variant="secondary" size="sm" onClick={() => openDeliveryNotePanel(sale)}>
+                        Bon livraison
+                      </Button>
                     </div>
                   </div>
                 ))
               ) : (
                 <div className="rounded-[22px] border border-dashed border-[#d8cfbf] bg-[#fcfbf8] p-8 text-center text-gray-500">
-                  Aucune vente POS affichée pour le moment.
+                  Aucune vente POS récente pour le moment.
                 </div>
               )}
-            </div>
-
-            <div className="mt-5 hidden overflow-x-auto lg:block">
-              <table className="min-w-full overflow-hidden rounded-[22px] border border-[#ebe2d4]">
-                <thead className="bg-[#faf7f2]">
-                  <tr className="text-left text-xs uppercase tracking-[0.18em] text-[#9b8d80]">
-                    <th className="px-4 py-3">N° vente</th>
-                    <th className="px-4 py-3">Type</th>
-                    <th className="px-4 py-3">Client</th>
-                    <th className="px-4 py-3">Paiement</th>
-                    <th className="px-4 py-3">Total</th>
-                    <th className="px-4 py-3">Date</th>
-                    <th className="px-4 py-3">Actions</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-[#ebe2d4] bg-white">
-                  {isRecentSalesLoading ? (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                        Chargement des ventes POS...
-                      </td>
-                    </tr>
-                  ) : recentSales.length ? (
-                    recentSales.map((sale) => (
-                      <tr key={sale.id} className="align-top">
-                        <td className="px-4 py-4">
-                          <div className="font-bold text-agri-dark">{sale.saleNumber}</div>
-                          <div className="text-xs text-gray-400">{sale.status}</div>
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-600">
-                          {sale.documentType === 'RECEIPT' ? 'Reçu' : sale.documentType === 'INVOICE' ? 'Facture' : 'Proforma'}
-                        </td>
-                        <td className="px-4 py-4">
-                          <div className="font-medium text-agri-dark">{sale.customerName}</div>
-                          <div className="text-xs text-gray-400">{sale.customerPhone || sale.customerEmail || 'Client comptoir'}</div>
-                        </td>
-                        <td className="px-4 py-4 text-sm text-gray-600">{sale.paymentMethod || 'N/A'}</td>
-                        <td className="px-4 py-4 font-bold text-agri-green-700">{formatCurrency(sale.totalAmount)}</td>
-                        <td className="px-4 py-4 text-sm text-gray-500">{new Date(sale.createdAt).toLocaleString('fr-FR')}</td>
-                        <td className="px-4 py-4">
-                          <div className="flex flex-wrap gap-2">
-                            {(['RECEIPT', 'INVOICE', 'PROFORMA'] as PosDocumentType[]).map((type) => (
-                              <Button
-                                key={type}
-                                variant={type === sale.documentType ? 'primary' : 'secondary'}
-                                size="sm"
-                                onClick={() => handleDownload(sale.id, type)}
-                              >
-                                {type === 'RECEIPT' ? 'Reçu' : type === 'INVOICE' ? 'Facture' : 'Proforma'}
-                              </Button>
-                            ))}
-                            {sale.documentType === 'PROFORMA' ? (
-                              <Button variant="primary" size="sm" onClick={() => openConvertProformaPanel(sale)}>
-                                Transformer
-                              </Button>
-                            ) : null}
-                            <Button variant="secondary" size="sm" onClick={() => openDeliveryNotePanel(sale)}>
-                              Bon livraison
-                            </Button>
-                          </div>
-                        </td>
-                      </tr>
-                    ))
-                  ) : (
-                    <tr>
-                      <td colSpan={7} className="px-4 py-8 text-center text-gray-500">
-                        Aucune vente POS affichée pour le moment.
-                      </td>
-                    </tr>
-                  )}
-                </tbody>
-              </table>
             </div>
           </section>
 

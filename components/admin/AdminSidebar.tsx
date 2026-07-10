@@ -15,6 +15,7 @@ const NAV_LINKS = [
   { icon: '💼', label: 'Comptabilité', href: '/admin/accounting' },
   { icon: '📦', label: 'Catalogue', href: '/admin/products' },
   { icon: '🏪', label: 'Mini POS', href: '/admin/pos' },
+  { icon: '🧾', label: 'Historique POS', href: '/admin/pos/history' },
   { icon: '🛒', label: 'Commandes', href: '/admin/orders' },
   { icon: '👥', label: 'Utilisateurs', href: '/admin/users' },
   { icon: '🚚', label: 'Livreurs', href: '/admin/delivery-agents' },
