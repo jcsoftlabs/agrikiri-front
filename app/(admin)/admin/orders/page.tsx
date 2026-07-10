@@ -7,6 +7,7 @@ import Button from '@/components/ui/Button';
 import toast from 'react-hot-toast';
 import {
   bulkUpdateOrders,
+  cancelOrderAsAdmin,
   exportOrdersCsv,
   getAdminOrdersSummary,
   getAllOrders,
@@ -386,6 +387,19 @@ export default function AdminOrdersPage() {
     },
   });
 
+  const cancelOrderMutation = useMutation({
+    mutationFn: ({ orderId, payload }: { orderId: string; payload?: { note?: string | null } }) =>
+      cancelOrderAsAdmin(orderId, payload),
+    onSuccess: (updatedOrder) => {
+      toast.success('Commande annulée');
+      refreshOrders();
+      queryClient.setQueryData(['admin-order-detail', updatedOrder.id], updatedOrder);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Impossible d’annuler cette commande');
+    },
+  });
+
   const createDeliveryNoteMutation = useMutation({
     mutationFn: ({ orderId, payload }: { orderId: string; payload: Parameters<typeof createOrderDeliveryNote>[1] }) =>
       createOrderDeliveryNote(orderId, payload),
@@ -529,6 +543,32 @@ export default function AdminOrdersPage() {
         reminderType: reminderDraft.reminderType as any,
         message: reminderDraft.message || null,
       },
+    });
+  };
+
+  const handleAdminCancelOrder = () => {
+    if (!trackingOrderId || !trackingOrder) return;
+    const note = window.prompt(
+      trackingOrder.amountCollected && trackingOrder.amountCollected > 0
+        ? "Note d'annulation (optionnelle). Cette commande a déjà un encaissement et passera en suivi SAV / remboursement."
+        : "Note d'annulation (optionnelle)."
+    );
+
+    if (note === null) return;
+
+    const confirmed = window.confirm(
+      trackingOrder.amountCollected && trackingOrder.amountCollected > 0
+        ? "Confirmer l'annulation ? Le solde ouvert sera fermé, et la commande passera en suivi SAV / remboursement."
+        : trackingOrder.status === 'SHIPPED' || trackingOrder.status === 'DELIVERED' || trackingOrder.status === 'DELIVERY_FAILED'
+          ? "Confirmer l'annulation ? Le solde ouvert sera fermé, mais le stock ne sera pas réintégré automatiquement."
+          : "Confirmer l'annulation ? Le solde ouvert sera fermé et le stock sera réintégré."
+    );
+
+    if (!confirmed) return;
+
+    cancelOrderMutation.mutate({
+      orderId: trackingOrderId,
+      payload: { note: note.trim() || null },
     });
   };
 
@@ -844,6 +884,16 @@ export default function AdminOrdersPage() {
                     <InfoCard label="Reste" value={`${formatMoney(trackingOrder?.amountRemaining)} HTG`} tone={Number(trackingOrder?.amountRemaining || 0) > 0 ? 'amber' : 'green'} />
                     <InfoCard label="Bons" value={String(trackingOrder?.deliveryNotes?.length || deliveryNotes.length || 0)} />
                   </div>
+                  {trackingOrder && trackingOrder.status !== 'CANCELLED' && (
+                    <div className="mt-5 flex flex-wrap gap-3">
+                      <Button variant="danger" onClick={handleAdminCancelOrder} loading={cancelOrderMutation.isPending}>
+                        Annuler la commande
+                      </Button>
+                      <div className="text-sm text-gray-500 self-center">
+                        Sans encaissement: stock réintégré si la commande n’a pas quitté l’entrepôt. Avec encaissement: solde fermé et suivi SAV / remboursement.
+                      </div>
+                    </div>
+                  )}
                 </div>
 
                 <div className="card border border-gray-100 p-6">

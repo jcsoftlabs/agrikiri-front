@@ -293,7 +293,9 @@ function normalizeOrder(order: any): Order {
     amountCollected: order?.amountCollected != null ? Number(order.amountCollected) : 0,
     amountRemaining:
       order?.totalAmount != null
-        ? Math.max(0, Number(order.totalAmount) - Number(order?.amountCollected ?? 0))
+        ? order?.status === 'CANCELLED'
+          ? 0
+          : Math.max(0, Number(order.totalAmount) - Number(order?.amountCollected ?? 0))
         : undefined,
     orderItems: normalizedItems,
     items: normalizedItems,
@@ -343,6 +345,14 @@ export const markOrderPaymentFailed = async (
 
 export const cancelMyOrder = async (orderId: string): Promise<Order> => {
   const { data } = await api.post(`/orders/${orderId}/cancel`);
+  return normalizeOrder(data.data);
+};
+
+export const cancelOrderAsAdmin = async (
+  orderId: string,
+  payload?: { note?: string | null }
+): Promise<Order> => {
+  const { data } = await api.post(`/orders/${orderId}/admin-cancel`, payload || {});
   return normalizeOrder(data.data);
 };
 
