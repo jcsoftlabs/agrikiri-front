@@ -12,6 +12,8 @@ import {
   getAllOrders,
   getOrderDetail,
   recordOrderCollection,
+  sendOrderReminder,
+  updateOrderAfterSales,
   updateOrderStatus,
   updateOrderTracking,
   type AdminOrdersFilters,
@@ -71,6 +73,26 @@ const CANCELLATION_SOURCE_OPTIONS = [
   { value: 'CUSTOMER', label: 'Annulées par client' },
   { value: 'ADMIN', label: 'Annulées par admin' },
   { value: 'SYSTEM', label: 'Annulées par système' },
+];
+
+const AFTER_SALES_OPTIONS = [
+  { value: '', label: 'Tous les SAV' },
+  { value: 'NONE', label: 'Sans SAV' },
+  { value: 'RETURN_REQUESTED', label: 'Retour demandé' },
+  { value: 'RETURN_APPROVED', label: 'Retour approuvé' },
+  { value: 'RETURNED', label: 'Retour réceptionné' },
+  { value: 'REFUND_PENDING', label: 'Remboursement en attente' },
+  { value: 'REFUNDED', label: 'Remboursé' },
+  { value: 'REDELIVERY_SCHEDULED', label: 'Relivraison planifiée' },
+  { value: 'REDELIVERED', label: 'Relivré' },
+];
+
+const QUICK_VIEW_OPTIONS = [
+  { value: '', label: 'Vue générale' },
+  { value: 'CASH_TODAY', label: 'Cash du jour' },
+  { value: 'DELAYED', label: 'Commandes en retard' },
+  { value: 'DELIVERY_FAILURES', label: 'Échecs livraison' },
+  { value: 'AFTER_SALES', label: 'SAV ouvert' },
 ];
 
 const COLLECTION_METHOD_OPTIONS = PAYMENT_METHOD_OPTIONS.filter((option) => option.value);
@@ -138,9 +160,11 @@ export default function AdminOrdersPage() {
     paymentStatus: '',
     paymentMethod: '',
     deliveryMode: '',
+    afterSalesStatus: '',
     deliveryAgentId: '',
     cancellationSource: '',
     cashCollectionState: '',
+    quickView: '',
     dateFrom: '',
     dateTo: '',
   });
@@ -157,6 +181,14 @@ export default function AdminOrdersPage() {
     reference: '',
     note: '',
     collectedAt: '',
+  });
+  const [afterSalesDraft, setAfterSalesDraft] = useState({
+    afterSalesStatus: 'NONE',
+    note: '',
+  });
+  const [reminderDraft, setReminderDraft] = useState({
+    reminderType: 'PAYMENT',
+    message: '',
   });
   const [deliveryNoteDraft, setDeliveryNoteDraft] = useState<{
     deliveryAgentId: string;
@@ -254,6 +286,21 @@ export default function AdminOrdersPage() {
       note: '',
       collectedAt: '',
     });
+    setAfterSalesDraft({
+      afterSalesStatus: trackingOrder.afterSalesStatus || 'NONE',
+      note: trackingOrder.afterSalesNote || '',
+    });
+    setReminderDraft({
+      reminderType:
+        trackingOrder.status === 'DELIVERY_FAILED'
+          ? 'DELIVERY_FAILURE'
+          : trackingOrder.paymentStatus !== 'PAID'
+            ? 'PAYMENT'
+            : trackingOrder.afterSalesStatus && trackingOrder.afterSalesStatus !== 'NONE'
+              ? 'AFTER_SALES'
+              : 'SHIPPING',
+      message: '',
+    });
   }, [trackingOrder]);
 
   const refreshOrders = () => {
@@ -297,6 +344,32 @@ export default function AdminOrdersPage() {
     },
     onError: (error: any) => {
       toast.error(error.response?.data?.message || 'Impossible d’enregistrer cet encaissement');
+    },
+  });
+
+  const afterSalesMutation = useMutation({
+    mutationFn: ({ orderId, payload }: { orderId: string; payload: Parameters<typeof updateOrderAfterSales>[1] }) =>
+      updateOrderAfterSales(orderId, payload),
+    onSuccess: (updatedOrder) => {
+      toast.success('SAV mis à jour');
+      refreshOrders();
+      queryClient.setQueryData(['admin-order-detail', updatedOrder.id], updatedOrder);
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Impossible de mettre à jour le SAV');
+    },
+  });
+
+  const reminderMutation = useMutation({
+    mutationFn: ({ orderId, payload }: { orderId: string; payload: Parameters<typeof sendOrderReminder>[1] }) =>
+      sendOrderReminder(orderId, payload),
+    onSuccess: () => {
+      toast.success('Relance envoyée');
+      setReminderDraft((current) => ({ ...current, message: '' }));
+      queryClient.invalidateQueries({ queryKey: ['admin-order-detail', trackingOrderId] });
+    },
+    onError: (error: any) => {
+      toast.error(error.response?.data?.message || 'Impossible d’envoyer la relance');
     },
   });
 
@@ -437,6 +510,28 @@ export default function AdminOrdersPage() {
     }
   };
 
+  const handleAfterSalesUpdate = () => {
+    if (!trackingOrderId) return;
+    afterSalesMutation.mutate({
+      orderId: trackingOrderId,
+      payload: {
+        afterSalesStatus: afterSalesDraft.afterSalesStatus as any,
+        note: afterSalesDraft.note || null,
+      },
+    });
+  };
+
+  const handleReminderSend = () => {
+    if (!trackingOrderId) return;
+    reminderMutation.mutate({
+      orderId: trackingOrderId,
+      payload: {
+        reminderType: reminderDraft.reminderType as any,
+        message: reminderDraft.message || null,
+      },
+    });
+  };
+
   const handleBulkApply = () => {
     if (selectedOrderIds.length === 0) {
       toast.error('Sélectionne au moins une commande');
@@ -464,9 +559,11 @@ export default function AdminOrdersPage() {
       paymentStatus: '',
       paymentMethod: '',
       deliveryMode: '',
+      afterSalesStatus: '',
       deliveryAgentId: '',
       cancellationSource: '',
       cashCollectionState: '',
+      quickView: '',
       dateFrom: '',
       dateTo: '',
     });
@@ -502,10 +599,17 @@ export default function AdminOrdersPage() {
           <InfoCard label="Paiements partiels" value={String(summary?.partiallyCollectedCount || 0)} />
           <InfoCard label="Retards en attente" value={String(summary?.stalePendingCount || 0)} tone="rose" />
           <InfoCard label="Annulations client" value={String(summary?.customerCancelledCount || 0)} />
+          <InfoCard label="Retards en traitement" value={String(summary?.staleProcessingCount || 0)} tone="rose" />
+          <InfoCard label="Échecs à relancer" value={String(summary?.failedDeliveryFollowUpCount || 0)} tone="rose" />
+          <InfoCard label="Livrées non soldées" value={String(summary?.deliveredUnpaidCount || 0)} tone="amber" />
+          <InfoCard label="SAV ouvert" value={String(summary?.afterSalesOpenCount || 0)} />
         </div>
 
         <div className="card border border-gray-100 p-5 lg:p-6 mb-6">
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
+            <select className="input" value={filters.quickView || ''} onChange={(e) => { setFilters((current) => ({ ...current, quickView: e.target.value })); setPage(1); }}>
+              {QUICK_VIEW_OPTIONS.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}
+            </select>
             <input
               className="input xl:col-span-2"
               placeholder="Commande, client, email, téléphone, suivi"
@@ -525,6 +629,9 @@ export default function AdminOrdersPage() {
             </select>
             <select className="input" value={filters.deliveryMode || ''} onChange={(e) => { setFilters((current) => ({ ...current, deliveryMode: e.target.value })); setPage(1); }}>
               {DELIVERY_MODE_OPTIONS.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}
+            </select>
+            <select className="input" value={filters.afterSalesStatus || ''} onChange={(e) => { setFilters((current) => ({ ...current, afterSalesStatus: e.target.value })); setPage(1); }}>
+              {AFTER_SALES_OPTIONS.map((option) => <option key={option.value || 'all'} value={option.value}>{option.label}</option>)}
             </select>
             <select className="input" value={filters.deliveryAgentId || ''} onChange={(e) => { setFilters((current) => ({ ...current, deliveryAgentId: e.target.value })); setPage(1); }}>
               <option value="">Tous les livreurs</option>
@@ -614,6 +721,7 @@ export default function AdminOrdersPage() {
                         </td>
                         <td>
                           <div className="font-mono text-xs font-bold text-gray-500 uppercase">{order.orderNumber}</div>
+                          <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-gray-400">Site e-commerce</div>
                           <div className="mt-1 text-sm text-gray-500">{formatDate(order.createdAt)}</div>
                           {order.cancellationSource && (
                             <div className="mt-2 text-xs text-red-500">Annulation: {order.cancellationSource}</div>
@@ -657,6 +765,7 @@ export default function AdminOrdersPage() {
                             {isCashPending && <span className="rounded-full bg-amber-50 text-amber-700 px-3 py-1 font-semibold">Cash à rapprocher</span>}
                             {remaining > 0 && <span className="rounded-full bg-rose-50 text-rose-700 px-3 py-1 font-semibold">Solde ouvert</span>}
                             {(order._count?.deliveryNotes || 0) > 0 && <span className="rounded-full bg-blue-50 text-blue-700 px-3 py-1 font-semibold">{order._count?.deliveryNotes} bon(s)</span>}
+                            {order.afterSalesStatus && order.afterSalesStatus !== 'NONE' && <span className="rounded-full bg-violet-50 text-violet-700 px-3 py-1 font-semibold">SAV {order.afterSalesStatus}</span>}
                           </div>
                         </td>
                         <td>
@@ -683,6 +792,7 @@ export default function AdminOrdersPage() {
                     <div className="flex items-start justify-between gap-3">
                       <div>
                         <div className="font-mono text-xs font-bold text-gray-500 uppercase">{order.orderNumber}</div>
+                        <div className="mt-1 text-[11px] uppercase tracking-[0.18em] text-gray-400">Site e-commerce</div>
                         <div className="mt-1 font-semibold text-agri-dark">{order.customer?.firstName} {order.customer?.lastName}</div>
                         <div className="text-xs text-gray-400">{formatDate(order.createdAt)}</div>
                       </div>
@@ -918,6 +1028,45 @@ export default function AdminOrdersPage() {
                 </div>
 
                 <div className="card border border-gray-100 p-6">
+                  <h3 className="font-display text-2xl text-agri-dark mb-4">SAV / Retours / Remboursements</h3>
+                  {trackingOrder ? (
+                    <div className="space-y-4">
+                      <div className="rounded-2xl border border-gray-100 bg-white p-4">
+                        <div className="text-xs uppercase tracking-[0.22em] text-gray-400">Statut actuel</div>
+                        <div className="mt-2 font-semibold text-agri-dark">{trackingOrder.afterSalesStatus || 'NONE'}</div>
+                        {trackingOrder.afterSalesUpdatedAt && <div className="text-xs text-gray-500 mt-2">Mis à jour le {formatDate(trackingOrder.afterSalesUpdatedAt, true)}</div>}
+                      </div>
+                      <select className="input" value={afterSalesDraft.afterSalesStatus} onChange={(e) => setAfterSalesDraft((current) => ({ ...current, afterSalesStatus: e.target.value }))}>
+                        {AFTER_SALES_OPTIONS.filter((option) => option.value).map((option) => <option key={option.value} value={option.value}>{option.label}</option>)}
+                      </select>
+                      <textarea className="input min-h-[100px]" placeholder="Note SAV, retour, remboursement ou relivraison" value={afterSalesDraft.note} onChange={(e) => setAfterSalesDraft((current) => ({ ...current, note: e.target.value }))} />
+                      <Button variant="primary" onClick={handleAfterSalesUpdate} loading={afterSalesMutation.isPending}>Mettre à jour le SAV</Button>
+                    </div>
+                  ) : (
+                    <div className="shimmer h-40 rounded-3xl" />
+                  )}
+                </div>
+
+                <div className="card border border-gray-100 p-6">
+                  <h3 className="font-display text-2xl text-agri-dark mb-4">Relances client</h3>
+                  {trackingOrder ? (
+                    <div className="space-y-4">
+                      <select className="input" value={reminderDraft.reminderType} onChange={(e) => setReminderDraft((current) => ({ ...current, reminderType: e.target.value }))}>
+                        <option value="PAYMENT">Relance paiement</option>
+                        <option value="SHIPPING">Relance expédition</option>
+                        <option value="DELIVERY_FAILURE">Relance échec livraison</option>
+                        <option value="AFTER_SALES">Relance SAV</option>
+                        <option value="CUSTOM">Message personnalisé</option>
+                      </select>
+                      <textarea className="input min-h-[100px]" placeholder="Message optionnel. Si tu laisses vide, AGRIKIRI enverra un message standard intelligent." value={reminderDraft.message} onChange={(e) => setReminderDraft((current) => ({ ...current, message: e.target.value }))} />
+                      <Button variant="secondary" onClick={handleReminderSend} loading={reminderMutation.isPending}>Envoyer la relance</Button>
+                    </div>
+                  ) : (
+                    <div className="shimmer h-40 rounded-3xl" />
+                  )}
+                </div>
+
+                <div className="card border border-gray-100 p-6">
                   <h3 className="font-display text-2xl text-agri-dark mb-4">Timeline et contexte</h3>
                   {trackingOrder ? (
                     <div className="space-y-3">
@@ -939,6 +1088,30 @@ export default function AdminOrdersPage() {
                           </div>
                         </div>
                       ))}
+                      <div className="pt-3">
+                        <div className="text-xs uppercase tracking-[0.22em] text-gray-400 mb-3">Audit admin</div>
+                        {(trackingOrder.auditLogs || []).length > 0 ? (
+                          <div className="space-y-3">
+                            {(trackingOrder.auditLogs || []).map((log) => (
+                              <div key={log.id} className="rounded-2xl border border-gray-100 bg-white p-4">
+                                <div className="flex items-start justify-between gap-3">
+                                  <div>
+                                    <div className="font-semibold text-agri-dark">{log.title}</div>
+                                    <div className="text-xs text-gray-400 mt-1">{log.actionType}</div>
+                                    {log.description && <div className="text-sm text-gray-600 mt-2">{log.description}</div>}
+                                    {log.actor && <div className="text-xs text-gray-500 mt-2">Par {log.actor.firstName} {log.actor.lastName} • {log.actor.role}</div>}
+                                  </div>
+                                  <div className="text-xs text-gray-400">{formatDate(log.createdAt, true)}</div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        ) : (
+                          <div className="rounded-2xl border border-dashed border-gray-200 bg-gray-50 px-4 py-8 text-center text-sm text-gray-500">
+                            Aucun audit admin pour cette commande.
+                          </div>
+                        )}
+                      </div>
                     </div>
                   ) : (
                     <div className="shimmer h-52 rounded-3xl" />

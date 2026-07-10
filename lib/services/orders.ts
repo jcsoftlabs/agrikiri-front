@@ -112,6 +112,10 @@ export interface AdminOrdersSummary {
   cashToReconcileCount: number;
   partiallyCollectedCount: number;
   stalePendingCount: number;
+  staleProcessingCount: number;
+  failedDeliveryFollowUpCount: number;
+  deliveredUnpaidCount: number;
+  afterSalesOpenCount: number;
 }
 
 export interface AdminOrdersFilters {
@@ -119,9 +123,11 @@ export interface AdminOrdersFilters {
   paymentStatus?: string;
   paymentMethod?: string;
   deliveryMode?: string;
+  afterSalesStatus?: string;
   deliveryAgentId?: string;
   cancellationSource?: string;
   cashCollectionState?: string;
+  quickView?: string;
   q?: string;
   dateFrom?: string;
   dateTo?: string;
@@ -140,6 +146,9 @@ export interface Order {
   paymentStatus: 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'FAILED';
   paymentMethod?: 'PLOPPLOP' | 'MONCASH' | 'CASH' | 'CHEQUE' | 'VIREMENT_BANCAIRE' | 'NATCASH' | 'KASHPAW';
   cashReconciledAt?: string | null;
+  afterSalesStatus?: 'NONE' | 'RETURN_REQUESTED' | 'RETURN_APPROVED' | 'RETURNED' | 'REFUND_PENDING' | 'REFUNDED' | 'REDELIVERY_SCHEDULED' | 'REDELIVERED';
+  afterSalesNote?: string | null;
+  afterSalesUpdatedAt?: string | null;
   cancelledAt?: string | null;
   cancellationSource?: 'CUSTOMER' | 'ADMIN' | 'SYSTEM' | null;
   deliveryAddress?: DeliveryAddress;
@@ -173,6 +182,19 @@ export interface Order {
     totalWeightLbs: number;
     createdAt: string;
     deliveredAt?: string | null;
+  }[];
+  auditLogs?: {
+    id: string;
+    actionType: string;
+    title: string;
+    description?: string | null;
+    metadata?: any;
+    createdAt: string;
+    actor?: {
+      firstName: string;
+      lastName: string;
+      role?: string;
+    } | null;
   }[];
   createdAt: string;
   customer?: {
@@ -394,6 +416,28 @@ export const exportOrdersCsv = async (filters?: AdminOrdersFilters): Promise<Blo
     responseType: 'blob',
   });
   return data;
+};
+
+export const updateOrderAfterSales = async (
+  orderId: string,
+  payload: {
+    afterSalesStatus: 'NONE' | 'RETURN_REQUESTED' | 'RETURN_APPROVED' | 'RETURNED' | 'REFUND_PENDING' | 'REFUNDED' | 'REDELIVERY_SCHEDULED' | 'REDELIVERED';
+    note?: string | null;
+  }
+): Promise<Order> => {
+  const { data } = await api.patch(`/orders/${orderId}/after-sales`, payload);
+  return normalizeOrder(data.data);
+};
+
+export const sendOrderReminder = async (
+  orderId: string,
+  payload: {
+    reminderType: 'PAYMENT' | 'SHIPPING' | 'DELIVERY_FAILURE' | 'AFTER_SALES' | 'CUSTOM';
+    message?: string | null;
+  }
+) => {
+  const { data } = await api.post(`/orders/${orderId}/reminders`, payload);
+  return data.data;
 };
 
 // Get user orders (Current user)
