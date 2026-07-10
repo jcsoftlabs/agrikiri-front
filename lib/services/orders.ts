@@ -82,6 +82,51 @@ export interface VerifyOrderPaymentResponse {
   };
 }
 
+export interface OrderPaymentCollection {
+  id: string;
+  amount: number;
+  method: 'PLOPPLOP' | 'MONCASH' | 'CASH' | 'CHEQUE' | 'VIREMENT_BANCAIRE' | 'NATCASH' | 'KASHPAW';
+  reference?: string | null;
+  note?: string | null;
+  collectedAt: string;
+  createdAt?: string;
+  collectedBy?: {
+    firstName: string;
+    lastName: string;
+    role?: string;
+  };
+}
+
+export interface AdminOrdersSummary {
+  totalOrders: number;
+  totalAmount: number;
+  totalCollected: number;
+  totalOutstanding: number;
+  pendingCount: number;
+  processingCount: number;
+  shippedCount: number;
+  deliveredCount: number;
+  failedCount: number;
+  cancelledCount: number;
+  customerCancelledCount: number;
+  cashToReconcileCount: number;
+  partiallyCollectedCount: number;
+  stalePendingCount: number;
+}
+
+export interface AdminOrdersFilters {
+  status?: string;
+  paymentStatus?: string;
+  paymentMethod?: string;
+  deliveryMode?: string;
+  deliveryAgentId?: string;
+  cancellationSource?: string;
+  cashCollectionState?: string;
+  q?: string;
+  dateFrom?: string;
+  dateTo?: string;
+}
+
 export interface Order {
   id: string;
   orderNumber?: string;
@@ -93,7 +138,10 @@ export interface Order {
   amountRemaining?: number;
   status: 'PENDING' | 'PROCESSING' | 'SHIPPED' | 'DELIVERED' | 'DELIVERY_FAILED' | 'CANCELLED';
   paymentStatus: 'PENDING' | 'PARTIALLY_PAID' | 'PAID' | 'FAILED';
-  paymentMethod?: 'PLOPPLOP' | 'MONCASH' | 'CASH' | 'NATCASH' | 'KASHPAW';
+  paymentMethod?: 'PLOPPLOP' | 'MONCASH' | 'CASH' | 'CHEQUE' | 'VIREMENT_BANCAIRE' | 'NATCASH' | 'KASHPAW';
+  cashReconciledAt?: string | null;
+  cancelledAt?: string | null;
+  cancellationSource?: 'CUSTOMER' | 'ADMIN' | 'SYSTEM' | null;
   deliveryAddress?: DeliveryAddress;
   deliveryMode?: 'INTERNAL' | 'EXTERNAL';
   deliveryAgentId?: string | null;
@@ -116,6 +164,16 @@ export interface Order {
   deliveredLocationAccuracy?: number | null;
   deliveryProofCapturedAt?: string | null;
   trackingEvents?: OrderTrackingEvent[];
+  paymentCollections?: OrderPaymentCollection[];
+  deliveryNotes?: {
+    id: string;
+    noteNumber: string;
+    status: string;
+    totalQuantity: number;
+    totalWeightLbs: number;
+    createdAt: string;
+    deliveredAt?: string | null;
+  }[];
   createdAt: string;
   customer?: {
     firstName: string;
@@ -135,6 +193,11 @@ export interface Order {
     firstName: string;
     lastName: string;
     phone?: string;
+  };
+  _count?: {
+    items?: number;
+    deliveryNotes?: number;
+    trackingEvents?: number;
   };
 }
 
@@ -213,6 +276,11 @@ function normalizeOrder(order: any): Order {
     orderItems: normalizedItems,
     items: normalizedItems,
     trackingEvents: order?.trackingEvents ?? [],
+    paymentCollections: (order?.paymentCollections ?? []).map((collection: any) => ({
+      ...collection,
+      amount: collection?.amount != null ? Number(collection.amount) : 0,
+    })),
+    deliveryNotes: order?.deliveryNotes ?? [],
     deliveredLatitude:
       order?.deliveredLatitude != null ? Number(order.deliveredLatitude) : null,
     deliveredLongitude:
@@ -260,16 +328,20 @@ export const cancelMyOrder = async (orderId: string): Promise<Order> => {
 export const getAllOrders = async (
   page = 1,
   limit = 20,
-  status?: string,
-  paymentStatus?: string,
-  deliveryAgentId?: string,
-  q?: string
+  filters?: AdminOrdersFilters
 ): Promise<OrdersListResponse> => {
-  const { data } = await api.get('/orders/all', { params: { page, limit, status, paymentStatus, deliveryAgentId, q } });
+  const { data } = await api.get('/orders/all', { params: { page, limit, ...(filters || {}) } });
   return {
     ...data.data,
     orders: (data.data.orders || []).map(normalizeOrder),
   };
+};
+
+export const getAdminOrdersSummary = async (
+  filters?: AdminOrdersFilters
+): Promise<AdminOrdersSummary> => {
+  const { data } = await api.get('/orders/all/summary', { params: filters || {} });
+  return data.data;
 };
 
 // Update order status (Admin only)
@@ -288,6 +360,40 @@ export const updateOrderTracking = async (
 ): Promise<Order> => {
   const { data } = await api.patch(`/orders/${orderId}/tracking`, payload);
   return normalizeOrder(data.data);
+};
+
+export const recordOrderCollection = async (
+  orderId: string,
+  payload: {
+    amount: number;
+    method: 'PLOPPLOP' | 'MONCASH' | 'CASH' | 'CHEQUE' | 'VIREMENT_BANCAIRE' | 'NATCASH' | 'KASHPAW';
+    reference?: string | null;
+    note?: string | null;
+    collectedAt?: string | null;
+  }
+): Promise<Order> => {
+  const { data } = await api.post(`/orders/${orderId}/collections`, payload);
+  return normalizeOrder(data.data);
+};
+
+export const bulkUpdateOrders = async (payload: {
+  orderIds: string[];
+  status?: string;
+  paymentStatus?: string;
+  deliveryMode?: 'INTERNAL' | 'EXTERNAL';
+  deliveryAgentId?: string | null;
+  note?: string | null;
+}) => {
+  const { data } = await api.post('/orders/bulk-update', payload);
+  return data.data;
+};
+
+export const exportOrdersCsv = async (filters?: AdminOrdersFilters): Promise<Blob> => {
+  const { data } = await api.get('/orders/all/export', {
+    params: filters || {},
+    responseType: 'blob',
+  });
+  return data;
 };
 
 // Get user orders (Current user)
